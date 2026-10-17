@@ -1,0 +1,12 @@
+# pip install -r requirements.txt
+# python 3.11 or newer, use virtual environment
+numpy
+pandas
+pyarrow
+scipy
+scikit-learn
+torch
+matplotlib
+requests
+kaggle
+jupyterlab

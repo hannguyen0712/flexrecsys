@@ -1,0 +1,16 @@
+# conda env create -f environment.yml && conda activate flexrecsys
+name: flexrecsys
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - numpy
+  - pandas
+  - pyarrow
+  - scipy
+  - scikit-learn
+  - pytorch
+  - matplotlib
+  - requests
+  - kaggle
+  - jupyterlab
