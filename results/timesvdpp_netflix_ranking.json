@@ -1,0 +1,16 @@
+{
+  "recall@10": 0.05623426262120391,
+  "ndcg@10": 0.05607244494205003,
+  "recall@20": 0.06268404177560978,
+  "ndcg@20": 0.05643856010202746,
+  "n_users": 2282,
+  "model": "experimental_TimeSVD++",
+  "dataset": "data/netflix_day_dev",
+  "checkpoint": "results/timesvdpp_netflix_best.pt",
+  "users_ranked": 2393,
+  "catalog_movies": 14453,
+  "candidate_protocol": "train catalog excluding per-user train history",
+  "timestamp_protocol": "first validation day per user, fixed ranking snapshot",
+  "smoke_test": false,
+  "elapsed_seconds": 5.9
+}
