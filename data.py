@@ -174,6 +174,14 @@ def load_split(dataset="movielens", name="dev"):
     d = DATA_DIR / dataset / name
     if not (d / "train.parquet").exists():
         raise FileNotFoundError(f"Splits not built yet. Run: python data.py {dataset}")
+    return load_dir(d)
+
+
+def load_dir(folder):
+    # any folder holding train/val/test.parquet, e.g. data/netflix_day_dev
+    d = Path(folder)
+    if not (d / "train.parquet").exists():
+        raise FileNotFoundError(f"No train.parquet in {d}")
     return tuple(pd.read_parquet(d / f"{s}.parquet") for s in ["train", "val", "test"])
 
 
