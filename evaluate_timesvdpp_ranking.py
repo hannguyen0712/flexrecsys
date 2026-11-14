@@ -12,7 +12,8 @@ from timesvdpp_full import TimeSVDpp, setup_data
 
 
 def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
-                        rating_scale=(1, 5), verbose=True, clamp=True):
+                        rating_scale=(1, 5), verbose=True, clamp=True,
+                        seen_extra=None):
     # One recommendation snapshot per user, at their first validation date.
     # Validation labels are used only by metrics.evaluate_ranking afterwards.
     device = torch.device(device)
@@ -24,6 +25,13 @@ def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
     offsets = data['hist_offsets']
     history = data['history_items']
     recommendations = {}
+    # seen_extra: frame of (userId, movieId) rated after train, removed from the candidates too
+    extra = {}
+    if seen_extra is not None:
+        item_index = {int(m): j for j, m in enumerate(train_catalog)}
+        for uid, mid in zip(seen_extra.userId.to_numpy(), seen_extra.movieId.to_numpy()):
+            if int(mid) in item_index:
+                extra.setdefault(int(uid), []).append(item_index[int(mid)])
     first_val_row = (
         val.assign(_row=np.arange(len(val)))
            .sort_values(['userId', 'timestamp', 'movieId'])
@@ -39,7 +47,8 @@ def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
             bin_id = int(v_bins[val_row])
             day_key = int(v_daykeys[val_row])
 
-            already_rated = np.unique(history[offsets[ui]:offsets[ui+1]])
+            already_rated = np.unique(np.r_[history[offsets[ui]:offsets[ui+1]],
+                                            np.asarray(extra.get(user_id, []), dtype=np.int64)])
             candidate_idx = np.setdiff1d(all_item_indices, already_rated,
                                          assume_unique=True)
             scores = np.empty(len(candidate_idx), dtype=np.float32)

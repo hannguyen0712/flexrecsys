@@ -1,4 +1,3 @@
-# comparison figure + tables from a compare.py results file
 # python plots.py results/compare_movielens_dev.json
 #
 # intervals: std over seeds when a model ran with >= 2 seeds, otherwise a 95% bootstrap CI over
@@ -245,12 +244,14 @@ def plot_comparison(res, per_user=None, metrics=None, out=None, title=None, max_
         ax.set_ylim(-0.7, len(order) - 0.4)
 
     kinds = sorted(set(summary.interval) - {"none"})
+    split = "test" if res.get("eval") == "test" else "validation"
     d = res.get("data", {})
     note = (f"{res.get('dataset', '')}: {d.get('train_ratings', 0):,} train / "
-            f"{d.get('val_ratings', 0):,} val ratings, {d.get('users', 0):,} users. "
-            f"Whiskers: {'; '.join(kinds) if kinds else 'none (single run)'}. Scored on validation.")
+            f"{d.get('heldout_ratings', d.get('val_ratings', 0)):,} {split} ratings, "
+            f"{d.get('users', 0):,} users. "
+            f"Whiskers: {'; '.join(kinds) if kinds else 'none (single run)'}. Scored on {split}.")
     fig.text(0.01, 0.01, note, fontsize=7, color=MUTED, ha="left", va="bottom")
-    fig.suptitle(title or "Validation metrics: baselines vs flexrecsys", fontsize=11,
+    fig.suptitle(title or f"{split.capitalize()} metrics: baselines vs flexrecsys", fontsize=11,
                  color=INK, x=0.01, ha="left", y=0.99)
     fig.tight_layout(rect=(0, 0.05 / nrows, 1, 1 - 0.07 / nrows), w_pad=1.6, h_pad=1.2)
     if out:

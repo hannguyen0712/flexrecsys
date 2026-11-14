@@ -18,10 +18,12 @@ def paired(d, n_boot=4000, seed=0):
 
 
 if __name__ == "__main__":
+    # OURS can be overridden by the third argument
     if len(sys.argv) < 2:
         raise SystemExit("usage: python subgroup.py results/<tag> [baseline]")
     stem = sys.argv[1]
     base = sys.argv[2] if len(sys.argv) > 2 else "mf-refit"
+    OURS = sys.argv[3] if len(sys.argv) > 3 else OURS
     pu = pd.read_csv(f"{stem}_per_user.csv")
     p_change = pd.read_csv(f"{stem}_flags.csv").groupby("userId").p_change.mean()
     flagged = p_change.index[p_change > 0.5]

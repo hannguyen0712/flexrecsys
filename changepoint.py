@@ -124,16 +124,51 @@ def segment_evidence(S, b, yy, n, lam, sigma2):
     return -0.5 * (n * np.log(2 * np.pi * sigma2) + logdet + (yy - (b * sol).sum(-1)) / sigma2)
 
 
-def regime_weights(model, train, prior=0.2, n_components=8, reg=5.0, min_seg=10, floor=0.0,
+def regime_features(model, n_components):
+    # item factors projected on their top principal directions, plus a constant for the user bias
+    items = model.item_embeddings()
+    Q = items.filter(regex=r"^q\d+$").to_numpy()
+    _, _, Vt = np.linalg.svd(Q - Q.mean(0), full_matrices=False)
+    return np.hstack([Q @ Vt[:n_components].T, np.ones((len(Q), 1))]), items["b_i"].to_numpy()
+
+
+def fit_regime_prior(model, train, n_components=8, grid=None):
+    # empirical Bayes: the prior strength and rating noise that best explain the training ratings
+    # with one vector per user. keeps the detector matched to the scale of the item factors,
+    # which changes with how the base model was trained. no validation data involved
+    grid = np.logspace(-3, 3, 25) if grid is None else grid
+    Z, b_i = regime_features(model, n_components)
+    i = model.items.encode(train.movieId)
+    u = model.users.encode(train.userId)
+    y = train.rating.to_numpy(float) - float(model.net.mu) - b_i[i]
+    X = Z[i]
+    d, n_users = X.shape[1], len(model.users)
+    S, b, yy = np.zeros((n_users, d, d)), np.zeros((n_users, d)), np.zeros(n_users)
+    np.add.at(S, u, X[:, :, None] * X[:, None, :])
+    np.add.at(b, u, X * y[:, None])
+    np.add.at(yy, u, y * y)
+    n = np.bincount(u, minlength=n_users)
+    best = None
+    for lam in grid:
+        sol = np.linalg.solve(S + lam * np.eye(d), b[..., None])[..., 0]
+        # for a given lam the evidence-maximising noise variance has this closed form
+        sigma2 = (yy - (b * sol).sum(-1)).sum() / n.sum()
+        evidence = segment_evidence(S, b, yy, n, lam, sigma2).sum()
+        if best is None or evidence > best[0]:
+            best = (evidence, float(lam), float(np.sqrt(sigma2)))
+    return best[1], best[2]
+
+
+def regime_weights(model, train, prior=0.2, n_components=8, reg=None, min_seg=10, floor=0.0,
                    noise=None, return_diagnostics=False):
     # at most one change per user, located in rating space with items frozen: evidence for one
     # user vector over the whole history vs two vectors split at each candidate cut.
     # weight = posterior probability that the rating belongs to the user's current regime
-    items = model.item_embeddings()
-    Q = items.filter(regex=r"^q\d+$").to_numpy()
-    b_i = items["b_i"].to_numpy()
-    _, _, Vt = np.linalg.svd(Q - Q.mean(0), full_matrices=False)
-    Z = np.hstack([Q @ Vt[:n_components].T, np.ones((len(Q), 1))])
+    # reg=None fits the prior strength (and the noise, unless given) from the training ratings
+    if reg is None:
+        reg, fitted_noise = fit_regime_prior(model, train, n_components)
+        noise = fitted_noise if noise is None else noise
+    Z, b_i = regime_features(model, n_components)
 
     df = train.sort_values(["userId", "timestamp", "movieId"])
     idx = model.items.encode(df.movieId)

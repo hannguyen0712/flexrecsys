@@ -151,8 +151,10 @@ def evaluate(model, v, device, batch_size=8192, rating_scale=(1, 5), return_pred
 
 
 def fit_timesvdpp(d, factors=32, epochs=8, batch_size=4096, lr=.003, weight_decay=.0001,
-                  device='cpu', rating_scale=(1, 5), checkpoint=None, verbose=True, ablate=()):
-    # trains on setup_data/setup_frames output, keeps the best-validation-epoch weights in memory
+                  device='cpu', rating_scale=(1, 5), checkpoint=None, verbose=True, ablate=(),
+                  select=True):
+    # trains on setup_data/setup_frames output, keeps the best-validation-epoch weights in memory.
+    # select=False keeps the last epoch instead, for when d['v'] is the test split
     device=torch.device(device)
     tu,ti,tdev,tbins,tkeys,tr=d['t']
     model=TimeSVDpp(len(d['users']),len(d['items']),d['n_bins'],d['n_day_keys'],
@@ -182,13 +184,16 @@ def fit_timesvdpp(d, factors=32, epochs=8, batch_size=4096, lr=.003, weight_deca
         if verbose:
             print(f'Epoch {epoch:02d} | Train RMSE {np.sqrt(total/len(tr)):.5f} | '
                   f'Validation RMSE {score:.5f}',flush=True)
-        if score<best:
+        if not select:
+            best,best_epoch=score,epoch
+        elif score<best:
             best,best_epoch=score,epoch
             best_state={k:v.detach().clone() for k,v in model.state_dict().items()}
             if checkpoint:
                 Path(checkpoint).parent.mkdir(exist_ok=True)
                 torch.save(model.state_dict(),checkpoint)
-    model.load_state_dict(best_state)
+    if select:
+        model.load_state_dict(best_state)
     return model, best, best_epoch, history
 
 
