@@ -12,7 +12,7 @@ from timesvdpp_full import TimeSVDpp, setup_data
 
 
 def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
-                        rating_scale=(1, 5), verbose=True):
+                        rating_scale=(1, 5), verbose=True, clamp=True):
     # One recommendation snapshot per user, at their first validation date.
     # Validation labels are used only by metrics.evaluate_ranking afterwards.
     device = torch.device(device)
@@ -52,7 +52,9 @@ def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
                 D = torch.full((n,), dev, device=device, dtype=torch.float32)
                 B = torch.full((n,), bin_id, device=device, dtype=torch.long)
                 K = torch.full((n,), day_key, device=device, dtype=torch.long)
-                scores[lo:hi] = model(U, I, D, B, K, implicit).clamp(*rating_scale).cpu().numpy()
+                out = model(U, I, D, B, K, implicit)
+                # clamping ties every score above the scale maximum, then movieId breaks the tie
+                scores[lo:hi] = (out.clamp(*rating_scale) if clamp else out).cpu().numpy()
 
             # Deterministic score-descending, movie-ID-ascending tie break.
             candidate_movie_ids = train_catalog[candidate_idx]

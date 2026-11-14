@@ -17,6 +17,7 @@ ALL_MODELS = ["bias", "mf", "mf-refit", "mf-decay", "decay-refit", "timesvdpp", 
               "flexrecsys"]
 DEFAULT_MODELS = [m for m in ALL_MODELS if m != "flexrecsys-v1"]
 OURS = "flexrecsys"
+USER_REG_GRID = [1, 3, 10, 30, 100, 300, 1000, 3000]
 LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "MF, users refit",
           "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
           "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
@@ -48,21 +49,44 @@ def run_mf_decay(train, val, args, cache):
         {"epochs_run": len(m.history), "mean_weight": float(w.mean())}
 
 
+def pick_user_reg(base, train, val, args):
+    # chosen on the unweighted refit only, so the choice can't favour any weighting scheme
+    users = val.userId.unique()
+    best, best_score = None, -float("inf")
+    for reg in USER_REG_GRID:
+        m = copy.deepcopy(base).refit_users(train, None, reg=reg)
+        if args.user_reg_metric == "rmse":
+            score = -rmse(val.rating, m.predict(val))
+        else:
+            score = per_user_scores(m.recommend(train, users, 10), val, [10])["ndcg@10"].mean()
+        if args.verbose:
+            print(f"    user-reg {reg:g}: {args.user_reg_metric} {abs(score):.4f}")
+        if score > best_score:
+            best, best_score = reg, score
+    edge = " (edge of grid, extend USER_REG_GRID)" if best in (USER_REG_GRID[0], USER_REG_GRID[-1]) else ""
+    print(f"  user-reg auto -> {best:g}, {args.user_reg_metric} {abs(best_score):.4f}{edge}", flush=True)
+    return float(best)
+
+
 def base_mf(train, val, args, cache):
     # plain MF, fitted once per seed and shared by every model that builds on it
     if "mf" not in cache:
-        cache["mf"] = make_mf(args, args.verbose).fit(train, val)
+        m = make_mf(args, args.verbose).fit(train, val)
+        m.user_reg_ = pick_user_reg(m, train, val, args) if args.user_reg == "auto" \
+            else float(args.user_reg)
+        cache["mf"] = m
     return cache["mf"]
 
 
 def refit(base, train, weights, args):
-    return copy.deepcopy(base).refit_users(train, weights, reg=args.user_reg)
+    return copy.deepcopy(base).refit_users(train, weights, reg=base.user_reg_)
 
 
 def run_mf_refit(train, val, args, cache):
     # same refit as flexrecsys with all weights 1, so the refit itself isn't credited to the weights
     m = refit(base_mf(train, val, args, cache), train, None, args)
-    return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), {}
+    return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), \
+        {"user_reg": m.user_reg_}
 
 
 def run_decay_refit(train, val, args, cache):
@@ -106,12 +130,13 @@ def run_timesvdpp(train, val, args, cache):
     model, _, best_epoch, _ = fit_timesvdpp(d, args.tsvd_factors, args.tsvd_epochs,
                                             args.batch_size, args.tsvd_lr, args.tsvd_wd,
                                             args.device, tuple(args.rating_scale),
-                                            verbose=args.verbose)
+                                            verbose=args.verbose, ablate=args.tsvd_ablate)
     _, pred = evaluate(model, d["v"], args.device, rating_scale=tuple(args.rating_scale),
                        return_pred=True)
     users = sorted(int(u) for u in val.userId.unique())
     recs = recommend_timesvdpp(model, d, users, k=max(args.k), device=args.device,
-                               rating_scale=tuple(args.rating_scale), verbose=False)
+                               rating_scale=tuple(args.rating_scale), verbose=False,
+                               clamp=not args.tsvd_raw_rank)
     return pred, recs, {"best_epoch": best_epoch}
 
 
@@ -154,7 +179,7 @@ def run(args):
           f"{train.userId.nunique():,} users, {train.movieId.nunique():,} movies")
 
     runs = {m: [] for m in args.models}
-    per_user, detection = [], []
+    per_user, detection, flags = [], [], []
     for seed in args.seeds:
         cache = {}
         # deterministic models only need one seed
@@ -170,9 +195,14 @@ def run(args):
                    **scores.drop(columns="userId").mean().to_dict(),
                    "n_users": len(scores), "seconds": round(time.time() - start, 1), **extra}
             runs[name].append(row)
+            se = pd.DataFrame({"userId": val.userId.to_numpy(),
+                               "mse": (val.rating.to_numpy() - np.asarray(pred)) ** 2})
+            scores = scores.merge(se.groupby("userId", as_index=False).mse.mean(), on="userId")
             per_user.append(scores.assign(model=name, seed=seed))
             print("  " + "  ".join(f"{k} {v:.4f}" if isinstance(v, float) else f"{k} {v}"
                                    for k, v in row.items()), flush=True)
+        if "cp_diag" in cache:
+            flags.append(cache["cp_diag"].assign(seed=seed))
         if truth is not None and "cp_diag" in cache:
             detection.append({"seed": seed, **detection_quality(cache["cp_diag"], train, truth)})
             print("  change-point detection vs planted shifts:", detection[-1])
@@ -190,6 +220,8 @@ def run(args):
     json_path = RESULTS_DIR / f"{tag}.json"
     json_path.write_text(json.dumps(out, indent=2, default=float))
     pd.concat(per_user, ignore_index=True).to_csv(RESULTS_DIR / f"{tag}_per_user.csv", index=False)
+    if flags:
+        pd.concat(flags, ignore_index=True).to_csv(RESULTS_DIR / f"{tag}_flags.csv", index=False)
     paths = plots.render_all(json_path)
     print(f"\nsaved {json_path.name}, {tag}_per_user.csv, " + ", ".join(p.name for p in paths))
     print("\n" + plots.comparison_table(*plots.load_results(json_path), fmt="markdown"))
@@ -226,8 +258,11 @@ def parse_args(argv=None):
     g.add_argument("--cp-components", type=int, default=8)
     g.add_argument("--cp-reg", type=float, default=5.0)
     g = ap.add_argument_group("flexrecsys regime weighting")
-    g.add_argument("--user-reg", type=float, default=2.0,
-                   help="ridge strength for the user refit (mf-refit, decay-refit, flexrecsys)")
+    g.add_argument("--user-reg", default="auto",
+                   help="ridge strength for the user refit (mf-refit, decay-refit, flexrecsys); "
+                        "auto picks it per seed from USER_REG_GRID by validation NDCG@10 of mf-refit")
+    g.add_argument("--user-reg-metric", default="ndcg", choices=["ndcg", "rmse"],
+                   help="validation metric that auto user-reg optimises")
     g.add_argument("--cp-prior", type=float, default=0.2, help="prior P(user has a change)")
     g.add_argument("--cp-min-seg", type=int, default=10, help="fewest ratings in a regime")
     g.add_argument("--regime-floor", type=float, default=0.0, help="weight for pre-change ratings")
@@ -238,6 +273,11 @@ def parse_args(argv=None):
     g.add_argument("--tsvd-epochs", type=int, default=8)
     g.add_argument("--tsvd-lr", type=float, default=3e-3)
     g.add_argument("--tsvd-wd", type=float, default=1e-4)
+    g.add_argument("--tsvd-ablate", nargs="*", default=[],
+                   choices=["item_bin", "user_drift", "user_day", "implicit"],
+                   help="switch off TimeSVD++ components")
+    g.add_argument("--tsvd-raw-rank", action="store_true",
+                   help="rank on raw scores instead of scores clamped to the rating scale")
     g = ap.add_argument_group("synthetic data")
     g.add_argument("--syn-users", type=int, default=1500)
     g.add_argument("--syn-items", type=int, default=1200)

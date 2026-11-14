@@ -66,8 +66,9 @@ def setup_frames(train, val):
 
 class TimeSVDpp(nn.Module):
     def __init__(self, n_users, n_items, n_bins, n_day_keys, hist_items, hist_offsets,
-                 mean, factors=32):
+                 mean, factors=32, ablate=()):
         super().__init__()
+        self.ablate = frozenset(ablate)
         self.p = nn.Embedding(n_users, factors)
         self.q = nn.Embedding(n_items, factors)
         self.y = nn.Embedding(n_items, factors)
@@ -96,25 +97,35 @@ class TimeSVDpp(nn.Module):
         # For CPU efficiency, gather each user's history via embedding_bag.
         # Called as a full-user operation and indexed afterwards: gradients still
         # flow through y and user histories remain training-only.
+        if 'implicit' in self.ablate:
+            return None
         return torch.nn.functional.embedding_bag(
             self.hist_items, self.y.weight, self.hist_offsets[:-1], mode='sum'
         ) * self.hist_scale.unsqueeze(1)
 
     def forward(self, u, i, dev, bins, day_keys, implicit):
-        user_vector = (self.p(u) + self.user_factor_alpha(u)*dev.unsqueeze(1)
-                       + self.user_day_factor(day_keys) + implicit[u])
-        score = (self.q(i)*user_vector).sum(dim=1)
-        return (self.global_mean + self.user_bias(u).squeeze(1)
-                + self.item_bias(i).squeeze(1)
-                + self.item_bin_bias(i*self.n_bins+bins).squeeze(1)
-                + self.user_alpha(u).squeeze(1)*dev
-                + self.user_day_bias(day_keys).squeeze(1)
-                + score)
+        a = self.ablate
+        user_vector = self.p(u)
+        if 'user_drift' not in a:
+            user_vector = user_vector + self.user_factor_alpha(u)*dev.unsqueeze(1)
+        if 'user_day' not in a:
+            user_vector = user_vector + self.user_day_factor(day_keys)
+        if 'implicit' not in a:
+            user_vector = user_vector + implicit[u]
+        out = (self.fallback(u, dev, day_keys) + self.item_bias(i).squeeze(1)
+               + (self.q(i)*user_vector).sum(dim=1))
+        if 'item_bin' not in a:
+            out = out + self.item_bin_bias(i*self.n_bins+bins).squeeze(1)
+        return out
 
     def fallback(self, u, dev, day_keys):
-        return (self.global_mean + self.user_bias(u).squeeze(1)
-                + self.user_alpha(u).squeeze(1)*dev
-                + self.user_day_bias(day_keys).squeeze(1))
+        a = self.ablate
+        out = self.global_mean + self.user_bias(u).squeeze(1)
+        if 'user_drift' not in a:
+            out = out + self.user_alpha(u).squeeze(1)*dev
+        if 'user_day' not in a:
+            out = out + self.user_day_bias(day_keys).squeeze(1)
+        return out
 
 
 def evaluate(model, v, device, batch_size=8192, rating_scale=(1, 5), return_pred=False):
@@ -140,12 +151,12 @@ def evaluate(model, v, device, batch_size=8192, rating_scale=(1, 5), return_pred
 
 
 def fit_timesvdpp(d, factors=32, epochs=8, batch_size=4096, lr=.003, weight_decay=.0001,
-                  device='cpu', rating_scale=(1, 5), checkpoint=None, verbose=True):
+                  device='cpu', rating_scale=(1, 5), checkpoint=None, verbose=True, ablate=()):
     # trains on setup_data/setup_frames output, keeps the best-validation-epoch weights in memory
     device=torch.device(device)
     tu,ti,tdev,tbins,tkeys,tr=d['t']
     model=TimeSVDpp(len(d['users']),len(d['items']),d['n_bins'],d['n_day_keys'],
-                    d['history_items'],d['hist_offsets'],float(tr.mean()),factors).to(device)
+                    d['history_items'],d['hist_offsets'],float(tr.mean()),factors,ablate).to(device)
     optimizer=torch.optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay)
     ds=TensorDataset(*[
         torch.tensor(x,dtype=(torch.float32 if idx in [2,5] else torch.long))
