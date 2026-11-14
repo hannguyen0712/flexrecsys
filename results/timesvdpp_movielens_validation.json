@@ -1,0 +1,17 @@
+{
+  "model": "experimental_TimeSVD++",
+  "dataset": "data/dev",
+  "seed": 575,
+  "factors": 32,
+  "epochs": 8,
+  "lr": 0.003,
+  "weight_decay": 0.0001,
+  "batch_size": 4096,
+  "best_epoch": 8,
+  "best_validation_rmse": 0.7819964375348297,
+  "elapsed_seconds": 169.3,
+  "train_ratings": 851711,
+  "validation_ratings": 105443,
+  "unseen_validation_movies": 2112,
+  "notes": "Offline training-only implicit histories; no Recall/NDCG yet"
+}
