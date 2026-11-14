@@ -209,7 +209,8 @@ def main():
                 elapsed_seconds=round(time.time()-start,1),
                 train_ratings=len(tr),validation_ratings=len(d['v'][-1]),
                 unseen_validation_movies=int((d['v'][1]<0).sum()),
-                notes='Offline training-only implicit histories; no Recall/NDCG yet')
+                notes='Offline training-only implicit histories; ranking metrics come from '
+                      'evaluate_timesvdpp_ranking.py')
     Path('results/timesvdpp_netflix_validation.json').write_text(json.dumps(output,indent=2))
     print('Saved results/timesvdpp_netflix_validation.json',flush=True)
 

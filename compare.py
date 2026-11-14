@@ -1,11 +1,5 @@
-# joint comparison: baselines + flexrecsys on one split, one protocol, then figure + tables
-# python compare.py --dataset movielens --split dev
-# python compare.py --data data/netflix_day_dev --models bias mf mf-decay timesvdpp flexrecsys
-# python compare.py --synthetic --seeds 575 576 577
-# every model trains on train, early-stops on val where it has a loop, and is scored on val with
-# metrics.py: RMSE on all val ratings, Recall/NDCG@K over train-catalog movies the user hasn't rated
-
 import argparse
+import copy
 import json
 import time
 from pathlib import Path
@@ -13,16 +7,20 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from changepoint import changepoint_weights, time_decay_weights
+from changepoint import changepoint_weights, regime_weights, time_decay_weights
 from data import RATING_SCALE, load_dir, load_split, set_seed
 from metrics import per_user_scores, rmse
 import plots
 
 RESULTS_DIR = Path(__file__).parent / "results"
-ALL_MODELS = ["bias", "mf", "mf-decay", "timesvdpp", "flexrecsys"]
+ALL_MODELS = ["bias", "mf", "mf-refit", "mf-decay", "decay-refit", "timesvdpp", "flexrecsys-v1",
+              "flexrecsys"]
+DEFAULT_MODELS = [m for m in ALL_MODELS if m != "flexrecsys-v1"]
 OURS = "flexrecsys"
-LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-decay": "MF + time decay",
-          "timesvdpp": "TimeSVD++", "flexrecsys": "flexrecsys (ours)"}
+LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "MF, users refit",
+          "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
+          "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
+          "flexrecsys": "flexrecsys (ours)"}
 
 
 def make_mf(args, verbose):
@@ -38,8 +36,7 @@ def run_bias(train, val, args, cache):
 
 
 def run_mf(train, val, args, cache):
-    m = make_mf(args, args.verbose).fit(train, val)
-    cache["mf"] = m
+    m = base_mf(train, val, args, cache)
     return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), \
         {"epochs_run": len(m.history)}
 
@@ -51,13 +48,50 @@ def run_mf_decay(train, val, args, cache):
         {"epochs_run": len(m.history), "mean_weight": float(w.mean())}
 
 
+def base_mf(train, val, args, cache):
+    # plain MF, fitted once per seed and shared by every model that builds on it
+    if "mf" not in cache:
+        cache["mf"] = make_mf(args, args.verbose).fit(train, val)
+    return cache["mf"]
+
+
+def refit(base, train, weights, args):
+    return copy.deepcopy(base).refit_users(train, weights, reg=args.user_reg)
+
+
+def run_mf_refit(train, val, args, cache):
+    # same refit as flexrecsys with all weights 1, so the refit itself isn't credited to the weights
+    m = refit(base_mf(train, val, args, cache), train, None, args)
+    return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), {}
+
+
+def run_decay_refit(train, val, args, cache):
+    w = time_decay_weights(train, args.half_life, args.decay_floor)
+    m = refit(base_mf(train, val, args, cache), train, w, args)
+    return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), \
+        {"mean_weight": float(w.mean())}
+
+
 def run_flexrecsys(train, val, args, cache):
-    # stage 1: plain MF for item factors (reused from the mf run when it's in the same seed)
-    base = cache.get("mf") or make_mf(args, args.verbose).fit(train, val)
+    # stage 1: plain MF. stage 2: locate each user's change in rating space.
+    # stage 3: refit only the user vectors with the regime weights, items stay as trained
+    base = base_mf(train, val, args, cache)
+    w, diag = regime_weights(base, train, prior=args.cp_prior, n_components=args.cp_components,
+                             reg=args.cp_reg, min_seg=args.cp_min_seg, floor=args.regime_floor,
+                             noise=args.cp_noise, return_diagnostics=True)
+    cache["cp_diag"] = diag
+    m = refit(base, train, w, args)
+    extra = {"mean_weight": float(w.mean()),
+             "users_flagged": int((diag.p_change > 0.5).sum()), "users": len(diag)}
+    return m.predict(val), m.recommend(train, val.userId.unique(), max(args.k)), extra
+
+
+def run_flexrecsys_v1(train, val, args, cache):
+    base = base_mf(train, val, args, cache)
     w, diag = changepoint_weights(base, train, window=args.window, hazard=1 / args.expected_run,
                                   floor=args.cp_floor, n_components=args.cp_components,
                                   reg=args.cp_reg, return_diagnostics=True)
-    cache["cp_diag"] = diag
+    cache.setdefault("cp_diag", diag)
     # stage 2: refit with change-point weights
     m = make_mf(args, args.verbose).fit(train, val, weights=w)
     extra = {"epochs_run": len(m.history), "mean_weight": float(w.mean()),
@@ -81,8 +115,9 @@ def run_timesvdpp(train, val, args, cache):
     return pred, recs, {"best_epoch": best_epoch}
 
 
-RUNNERS = {"bias": run_bias, "mf": run_mf, "mf-decay": run_mf_decay,
-           "timesvdpp": run_timesvdpp, "flexrecsys": run_flexrecsys}
+RUNNERS = {"bias": run_bias, "mf": run_mf, "mf-refit": run_mf_refit, "mf-decay": run_mf_decay,
+           "decay-refit": run_decay_refit, "timesvdpp": run_timesvdpp,
+           "flexrecsys-v1": run_flexrecsys_v1, "flexrecsys": run_flexrecsys}
 
 
 def load_data(args):
@@ -169,7 +204,7 @@ def parse_args(argv=None):
     ap.add_argument("--dataset", default="movielens", choices=list(RATING_SCALE))
     ap.add_argument("--split", default="dev")
     ap.add_argument("--rating-scale", type=float, nargs=2, default=None)
-    ap.add_argument("--models", nargs="+", default=ALL_MODELS, choices=ALL_MODELS)
+    ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, choices=ALL_MODELS)
     ap.add_argument("--seeds", type=int, nargs="+", default=[575])
     ap.add_argument("--k", type=int, nargs="+", default=[10, 20])
     ap.add_argument("--tag", help="output name under results/ (default compare_<data>)")
@@ -184,12 +219,20 @@ def parse_args(argv=None):
     g = ap.add_argument_group("time decay baseline")
     g.add_argument("--half-life", type=float, default=180.0, help="days")
     g.add_argument("--decay-floor", type=float, default=0.0)
-    g = ap.add_argument_group("flexrecsys change-point weighting")
+    g = ap.add_argument_group("flexrecsys v1 window BOCPD (cp-components and cp-reg are shared)")
     g.add_argument("--window", type=int, default=10, help="ratings per embedding window")
     g.add_argument("--expected-run", type=float, default=20.0, help="1/hazard, in windows")
     g.add_argument("--cp-floor", type=float, default=0.2, help="weight for pre-change ratings")
     g.add_argument("--cp-components", type=int, default=8)
     g.add_argument("--cp-reg", type=float, default=5.0)
+    g = ap.add_argument_group("flexrecsys regime weighting")
+    g.add_argument("--user-reg", type=float, default=2.0,
+                   help="ridge strength for the user refit (mf-refit, decay-refit, flexrecsys)")
+    g.add_argument("--cp-prior", type=float, default=0.2, help="prior P(user has a change)")
+    g.add_argument("--cp-min-seg", type=int, default=10, help="fewest ratings in a regime")
+    g.add_argument("--regime-floor", type=float, default=0.0, help="weight for pre-change ratings")
+    g.add_argument("--cp-noise", type=float, default=None,
+                   help="rating noise sd for the detector (default: base MF train residual)")
     g = ap.add_argument_group("TimeSVD++")
     g.add_argument("--tsvd-factors", type=int, default=32)
     g.add_argument("--tsvd-epochs", type=int, default=8)

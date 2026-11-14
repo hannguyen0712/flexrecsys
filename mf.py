@@ -214,6 +214,30 @@ class MF:
                 recs[int(user)] = self.items.decode(row).tolist()
         return recs
 
+    def refit_users(self, train, weights=None, reg=1.0):
+        # weighted ridge for p_u and b_u with items frozen, overwrites the user tables.
+        # a taste shift changes the user, not the movies, so only the user side sees the weights
+        Q = self.net.Q.weight.detach().cpu().numpy().astype(float)
+        b_i = self.net.b_i.weight.detach().cpu().numpy().ravel().astype(float)
+        u, i = self.users.encode(train.userId), self.items.encode(train.movieId)
+        y = train.rating.to_numpy(float) - float(self.net.mu) - b_i[i]
+        w = np.ones(len(y)) if weights is None else np.asarray(weights, float)
+        n, d = len(self.users), Q.shape[1]
+        order = np.argsort(u, kind="stable")
+        bounds = np.searchsorted(u[order], np.arange(n + 1))
+        P, b_u = np.zeros((n, d)), np.zeros(n)
+        for a in range(n):
+            rows = order[bounds[a]:bounds[a + 1]]
+            X = np.hstack([Q[i[rows]], np.ones((len(rows), 1))])
+            Xw = X * w[rows, None]
+            sol = np.linalg.solve(X.T @ Xw + reg * np.eye(d + 1), Xw.T @ y[rows])
+            P[a], b_u[a] = sol[:d], sol[d]
+        with torch.no_grad():
+            self.net.P.weight.copy_(torch.tensor(P, dtype=torch.float32, device=self.device))
+            self.net.b_u.weight.copy_(torch.tensor(b_u[:, None], dtype=torch.float32,
+                                                   device=self.device))
+        return self
+
     def user_embeddings(self):
         P = self.net.P.weight.detach().cpu().numpy()
         df = pd.DataFrame(P, columns=[f"p{j}" for j in range(P.shape[1])])

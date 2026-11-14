@@ -114,6 +114,67 @@ def changepoint_weights(model, train, window=10, hazard=1 / 20, floor=0.2, n_com
     return weights
 
 
+def segment_evidence(S, b, yy, n, lam, sigma2):
+    # log marginal likelihood of a segment under y ~ N(X theta, sigma2), theta ~ N(0, sigma2 / lam).
+    # S = X'X, b = X'y, yy = y'y, batched over the leading axis
+    d = S.shape[-1]
+    A = S + lam * np.eye(d)
+    sol = np.linalg.solve(A, b[..., None])[..., 0]
+    logdet = np.linalg.slogdet(A)[1] - d * np.log(lam)
+    return -0.5 * (n * np.log(2 * np.pi * sigma2) + logdet + (yy - (b * sol).sum(-1)) / sigma2)
+
+
+def regime_weights(model, train, prior=0.2, n_components=8, reg=5.0, min_seg=10, floor=0.0,
+                   noise=None, return_diagnostics=False):
+    # at most one change per user, located in rating space with items frozen: evidence for one
+    # user vector over the whole history vs two vectors split at each candidate cut.
+    # weight = posterior probability that the rating belongs to the user's current regime
+    items = model.item_embeddings()
+    Q = items.filter(regex=r"^q\d+$").to_numpy()
+    b_i = items["b_i"].to_numpy()
+    _, _, Vt = np.linalg.svd(Q - Q.mean(0), full_matrices=False)
+    Z = np.hstack([Q @ Vt[:n_components].T, np.ones((len(Q), 1))])
+
+    df = train.sort_values(["userId", "timestamp", "movieId"])
+    idx = model.items.encode(df.movieId)
+    y_all = df.rating.to_numpy(float) - float(model.net.mu) - b_i[idx]
+    if noise is None:
+        noise = np.sqrt(np.mean((df.rating.to_numpy(float) - model.predict(df)) ** 2))
+    sigma2 = float(noise) ** 2
+    X = Z[idx]
+    users = df.userId.to_numpy()
+    bounds = np.r_[0, np.flatnonzero(np.diff(users)) + 1, len(users)]
+
+    w = np.ones(len(df))
+    diag = []
+    for lo, hi in zip(bounds[:-1], bounds[1:]):
+        n = hi - lo
+        if n < 2 * min_seg:
+            diag.append((users[lo], n, -1, 0.0))
+            continue
+        x, y = X[lo:hi], y_all[lo:hi]
+        cS = np.cumsum(x[:, :, None] * x[:, None, :], 0)
+        cb = np.cumsum(x * y[:, None], 0)
+        cy = np.cumsum(y * y)
+        cuts = np.arange(min_seg, n - min_seg + 1)  # cut c: ratings c.. are the new regime
+        k = cuts - 1
+        pre = segment_evidence(cS[k], cb[k], cy[k], cuts, reg, sigma2)
+        post = segment_evidence(cS[-1] - cS[k], cb[-1] - cb[k], cy[-1] - cy[k], n - cuts, reg, sigma2)
+        none = segment_evidence(cS[-1], cb[-1], cy[-1], n, reg, sigma2)
+        logp = np.r_[np.log1p(-prior) + none, np.log(prior / len(cuts)) + pre + post]
+        p = np.exp(logp - logp.max())
+        p /= p.sum()
+        p_cut = np.zeros(n)
+        p_cut[cuts] = p[1:]
+        w[lo:hi] = floor + (1 - floor) * (p[0] + np.cumsum(p_cut))
+        diag.append((users[lo], n, int(cuts[np.argmax(p[1:])]), float(1 - p[0])))
+    weights = pd.Series(w, index=df.index).reindex(train.index).to_numpy()
+    if return_diagnostics:
+        d = pd.DataFrame(diag, columns=["userId", "n_ratings", "map_cut", "p_change"])
+        return weights, d
+    return weights
+
+
 def time_decay_weights(train, half_life_days=180.0, floor=0.0):
     # continuous exponential decay from each user's latest train rating (the smooth-drift view)
     last = train.groupby("userId")["timestamp"].transform("max").to_numpy()
