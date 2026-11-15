@@ -253,6 +253,24 @@ class MF:
                                                    device=self.device))
         return self
 
+    def refit_user_bias(self, train, weights, reg=1.0):
+        # keep every p_u, re-estimate only b_u from weighted residuals. with all weights 1 and the
+        # reg used in refit_users this returns the same b_u, so only down-weighted users move.
+        # b_u is one constant per user, so their ranking cannot change, only predicted ratings
+        Q = self.net.Q.weight.detach().cpu().numpy().astype(float)
+        P = self.net.P.weight.detach().cpu().numpy().astype(float)
+        b_i = self.net.b_i.weight.detach().cpu().numpy().ravel().astype(float)
+        u, i = self.users.encode(train.userId), self.items.encode(train.movieId)
+        resid = (train.rating.to_numpy(float) - float(self.net.mu) - b_i[i]
+                 - (P[u] * Q[i]).sum(1))
+        w = np.asarray(weights, float)
+        n = len(self.users)
+        b_u = np.bincount(u, w * resid, minlength=n) / (np.bincount(u, w, minlength=n) + reg)
+        with torch.no_grad():
+            self.net.b_u.weight.copy_(torch.tensor(b_u[:, None], dtype=torch.float32,
+                                                   device=self.device))
+        return self
+
     def user_embeddings(self):
         P = self.net.P.weight.detach().cpu().numpy()
         df = pd.DataFrame(P, columns=[f"p{j}" for j in range(P.shape[1])])

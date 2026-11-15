@@ -16,8 +16,9 @@ import plots
 
 RESULTS_DIR = Path(__file__).parent / "results"
 ALL_MODELS = ["bias", "mf", "mf-refit", "mf-decay", "decay-refit", "timesvdpp", "flexrecsys-v1",
-              "flexrecsys-soft", "flexrecsys"]
-DEFAULT_MODELS = [m for m in ALL_MODELS if m not in ("flexrecsys-v1", "flexrecsys-soft")]
+              "flexrecsys-soft", "flexrecsys-level", "flexrecsys"]
+DEFAULT_MODELS = [m for m in ALL_MODELS
+                  if m not in ("flexrecsys-v1", "flexrecsys-soft", "flexrecsys-level")]
 # soft update strengths, as multiples of the user-refit ridge strength
 SHIFT_GRID = [0.3, 1, 3, 10, 30, 100, 300]
 OURS = "flexrecsys"
@@ -25,7 +26,8 @@ USER_REG_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
 LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "MF, users refit",
           "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
           "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
-          "flexrecsys-soft": "flexrecsys, soft update", "flexrecsys": "flexrecsys (ours)"}
+          "flexrecsys-soft": "flexrecsys, soft update",
+          "flexrecsys-level": "flexrecsys, level update", "flexrecsys": "flexrecsys (ours)"}
 
 
 def make_mf(args, verbose):
@@ -149,6 +151,18 @@ def run_flexrecsys_soft(train, val, args, cache, ev):
     return *outputs(m, ev, args), extra
 
 
+def run_flexrecsys_level(train, val, args, cache, ev):
+    # taste vectors from the full history, exactly as mf-refit. only the rating level (user bias)
+    # is re-estimated with the regime weights, so no rating is discarded for taste and the
+    # ranking is identical to mf-refit by construction. nothing is tuned here
+    base = base_mf(train, val, args, cache)
+    w, diag, reg = regime_fit(base, train, args, cache)
+    m = refit(base, train, None, args).refit_user_bias(train, w, reg=base.user_reg_)
+    extra = {"mean_weight": float(w.mean()),
+             "users_flagged": int((diag.p_change > 0.5).sum()), "users": len(diag)}
+    return *outputs(m, ev, args), extra
+
+
 def run_flexrecsys(train, val, args, cache, ev):
     # stage 1: plain MF. stage 2: locate each user's change in rating space.
     # stage 3: refit only the user vectors with the regime weights, items stay as trained
@@ -203,6 +217,7 @@ def run_timesvdpp(train, val, args, cache, ev):
 RUNNERS = {"bias": run_bias, "mf": run_mf, "mf-refit": run_mf_refit, "mf-decay": run_mf_decay,
            "decay-refit": run_decay_refit, "timesvdpp": run_timesvdpp,
            "flexrecsys-v1": run_flexrecsys_v1, "flexrecsys-soft": run_flexrecsys_soft,
+           "flexrecsys-level": run_flexrecsys_level,
            "flexrecsys": run_flexrecsys}
 
 
