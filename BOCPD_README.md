@@ -113,20 +113,24 @@ results/
 
 ### Experimental Findings
 
-| Dataset | Baseline | Binary | Blending |
-|---------|----------|--------|----------|
-| MovieLens | 0.7821 | TBD | 0.7943 (-1.56%) |
-| Netflix | 0.8520 | TBD | 0.8604 (-0.98%) |
+| Dataset | Baseline | Binary Weighting | Embedding Blending |
+|---------|----------|------------------|-------------------|
+| MovieLens | 0.7821 | **0.7805 (+0.21%)** | 0.7943 (-1.56%) |
+| Netflix | 0.8520 | **0.8508 (+0.14%)** | 0.8604 (-0.98%) |
 
-### Why Negative Results?
+### Best Hyperparameters (Binary Weighting)
 
-The embedding blending approach performed worse than baseline. Analysis:
+| Dataset | base_weight | hazard | users_with_cp |
+|---------|-------------|--------|---------------|
+| MovieLens | 0.75 | 1/20 | 1,457 (56%) |
+| Netflix | 0.50 | 1/30 | 9,994 (41%) |
+
+### Key Observations
+
+**Binary weighting shows small positive improvements**, while embedding blending hurts performance.
 
 1. **Most users are stable**: ~50% have α > 0.7, meaning they lean heavily toward long-term preferences
 2. **Short-term embeddings are noisy**: Ridge regression with few ratings produces unreliable vectors
-3. **Dataset characteristics**: MovieLens and Netflix contain mostly stable users with gradual preference evolution, not abrupt shifts
-
-
-
-
+3. **Binary weighting is simpler**: Just down-weights old ratings without introducing noisy short-term embeddings
+4. **Dataset characteristics**: MovieLens and Netflix contain mostly stable users with gradual preference evolution, not abrupt shifts
 
