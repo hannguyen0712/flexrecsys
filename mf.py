@@ -99,12 +99,16 @@ class MFNet(nn.Module):
 
 class MF:
     def __init__(self, n_factors=64, reg=0.05, lr=5e-3, batch_size=4096, epochs=30,
-                 patience=3, rating_scale=(0.5, 5.0), device=None, verbose=True):
+                 patience=3, rating_scale=(0.5, 5.0), device=None, verbose=True,
+                 weight_decay=0.0):
         self.n_factors, self.reg, self.lr = n_factors, reg, lr
         self.batch_size, self.epochs, self.patience = batch_size, epochs, patience
         self.rating_scale = rating_scale
         self.device = device or pick_device()
         self.verbose = verbose
+        # Adam weight decay shrinks every row on every step, so rarely rated movies are pulled
+        # harder toward zero than with the per-batch l2 (reg), which only touches rows in the batch
+        self.weight_decay = weight_decay
 
     def fit(self, train, val=None, weights=None):
         # weights: one per train row (time decay, change-point downweighting), default all 1
@@ -118,7 +122,8 @@ class MF:
         mu = float((w * r).sum() / w.sum())
 
         self.net = MFNet(len(self.users), len(self.items), self.n_factors, mu).to(dev)
-        opt = torch.optim.Adam(self.net.parameters(), lr=self.lr)
+        opt = torch.optim.Adam(self.net.parameters(), lr=self.lr,
+                               weight_decay=self.weight_decay)
         self.history = []
         best, best_state, bad = float("inf"), None, 0
 
@@ -213,6 +218,58 @@ class MF:
             for user, row in zip(users[s : s + batch_size], top):
                 recs[int(user)] = self.items.decode(row).tolist()
         return recs
+
+    def refit_users(self, train, weights=None, reg=1.0, shift=0.0, anchor=None):
+        # weighted ridge for p_u and b_u with items frozen, overwrites the user tables.
+        # a taste shift changes the user, not the movies, so only the user side sees the weights.
+        # anchor (another MF) with shift > 0 adds shift * |p - p_anchor|^2: the user starts from
+        # the anchor's vector and moves only as far as the weighted ratings support
+        Q = self.net.Q.weight.detach().cpu().numpy().astype(float)
+        b_i = self.net.b_i.weight.detach().cpu().numpy().ravel().astype(float)
+        u, i = self.users.encode(train.userId), self.items.encode(train.movieId)
+        y = train.rating.to_numpy(float) - float(self.net.mu) - b_i[i]
+        w = np.ones(len(y)) if weights is None else np.asarray(weights, float)
+        n, d = len(self.users), Q.shape[1]
+        order = np.argsort(u, kind="stable")
+        bounds = np.searchsorted(u[order], np.arange(n + 1))
+        P, b_u = np.zeros((n, d)), np.zeros(n)
+        pull = None
+        if anchor is not None and shift > 0:
+            pull = shift * np.hstack([anchor.net.P.weight.detach().cpu().numpy().astype(float),
+                                      anchor.net.b_u.weight.detach().cpu().numpy().astype(float)])
+        for a in range(n):
+            rows = order[bounds[a]:bounds[a + 1]]
+            X = np.hstack([Q[i[rows]], np.ones((len(rows), 1))])
+            Xw = X * w[rows, None]
+            rhs = Xw.T @ y[rows]
+            strength = reg
+            if pull is not None:
+                rhs, strength = rhs + pull[a], reg + shift
+            sol = np.linalg.solve(X.T @ Xw + strength * np.eye(d + 1), rhs)
+            P[a], b_u[a] = sol[:d], sol[d]
+        with torch.no_grad():
+            self.net.P.weight.copy_(torch.tensor(P, dtype=torch.float32, device=self.device))
+            self.net.b_u.weight.copy_(torch.tensor(b_u[:, None], dtype=torch.float32,
+                                                   device=self.device))
+        return self
+
+    def refit_user_bias(self, train, weights, reg=1.0):
+        # keep every p_u, re-estimate only b_u from weighted residuals. with all weights 1 and the
+        # reg used in refit_users this returns the same b_u, so only down-weighted users move.
+        # b_u is one constant per user, so their ranking cannot change, only predicted ratings
+        Q = self.net.Q.weight.detach().cpu().numpy().astype(float)
+        P = self.net.P.weight.detach().cpu().numpy().astype(float)
+        b_i = self.net.b_i.weight.detach().cpu().numpy().ravel().astype(float)
+        u, i = self.users.encode(train.userId), self.items.encode(train.movieId)
+        resid = (train.rating.to_numpy(float) - float(self.net.mu) - b_i[i]
+                 - (P[u] * Q[i]).sum(1))
+        w = np.asarray(weights, float)
+        n = len(self.users)
+        b_u = np.bincount(u, w * resid, minlength=n) / (np.bincount(u, w, minlength=n) + reg)
+        with torch.no_grad():
+            self.net.b_u.weight.copy_(torch.tensor(b_u[:, None], dtype=torch.float32,
+                                                   device=self.device))
+        return self
 
     def user_embeddings(self):
         P = self.net.P.weight.detach().cpu().numpy()

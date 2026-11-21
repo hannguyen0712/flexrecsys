@@ -1,0 +1,16 @@
+{
+  "recall@10": 0.06951971348751235,
+  "ndcg@10": 0.07000712352110922,
+  "recall@20": 0.0788181667929251,
+  "ndcg@20": 0.07084126838157168,
+  "n_users": 2267,
+  "model": "experimental_TimeSVD++",
+  "dataset": "data/movielens_day_dev",
+  "checkpoint": "results/timesvdpp_movielens_day_best.pt",
+  "users_ranked": 2378,
+  "catalog_movies": 20228,
+  "candidate_protocol": "train catalog excluding per-user train history",
+  "timestamp_protocol": "first validation day per user, fixed ranking snapshot",
+  "smoke_test": false,
+  "elapsed_seconds": 8.1
+}

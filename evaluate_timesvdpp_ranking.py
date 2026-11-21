@@ -11,6 +11,69 @@ from metrics import evaluate_ranking
 from timesvdpp_full import TimeSVDpp, setup_data
 
 
+def recommend_timesvdpp(model, data, users, k=20, batch_size=8192, device='cpu',
+                        rating_scale=(1, 5), verbose=True, clamp=True,
+                        seen_extra=None):
+    # One recommendation snapshot per user, at their first validation date.
+    # Validation labels are used only by metrics.evaluate_ranking afterwards.
+    device = torch.device(device)
+    val = data['val']
+    _, _, v_devs, v_bins, v_daykeys, _ = data['v']
+    user_index = {int(uid): idx for idx, uid in enumerate(data['users'])}
+    train_catalog = np.asarray(data['items'], dtype=np.int64)
+    all_item_indices = np.arange(len(train_catalog), dtype=np.int64)
+    offsets = data['hist_offsets']
+    history = data['history_items']
+    recommendations = {}
+    # seen_extra: frame of (userId, movieId) rated after train, removed from the candidates too
+    extra = {}
+    if seen_extra is not None:
+        item_index = {int(m): j for j, m in enumerate(train_catalog)}
+        for uid, mid in zip(seen_extra.userId.to_numpy(), seen_extra.movieId.to_numpy()):
+            if int(mid) in item_index:
+                extra.setdefault(int(uid), []).append(item_index[int(mid)])
+    first_val_row = (
+        val.assign(_row=np.arange(len(val)))
+           .sort_values(['userId', 'timestamp', 'movieId'])
+           .groupby('userId', sort=False)['_row'].first().to_dict()
+    )
+    model.eval()
+    with torch.no_grad():
+        implicit = model.implicit_all()
+        for j, user_id in enumerate(users, 1):
+            ui = user_index[user_id]
+            val_row = int(first_val_row[user_id])
+            dev = float(v_devs[val_row])
+            bin_id = int(v_bins[val_row])
+            day_key = int(v_daykeys[val_row])
+
+            already_rated = np.unique(np.r_[history[offsets[ui]:offsets[ui+1]],
+                                            np.asarray(extra.get(user_id, []), dtype=np.int64)])
+            candidate_idx = np.setdiff1d(all_item_indices, already_rated,
+                                         assume_unique=True)
+            scores = np.empty(len(candidate_idx), dtype=np.float32)
+
+            for lo in range(0, len(candidate_idx), batch_size):
+                hi = min(lo + batch_size, len(candidate_idx))
+                n = hi - lo
+                U = torch.full((n,), ui, device=device, dtype=torch.long)
+                I = torch.as_tensor(candidate_idx[lo:hi], device=device, dtype=torch.long)
+                D = torch.full((n,), dev, device=device, dtype=torch.float32)
+                B = torch.full((n,), bin_id, device=device, dtype=torch.long)
+                K = torch.full((n,), day_key, device=device, dtype=torch.long)
+                out = model(U, I, D, B, K, implicit)
+                # clamping ties every score above the scale maximum, then movieId breaks the tie
+                scores[lo:hi] = (out.clamp(*rating_scale) if clamp else out).cpu().numpy()
+
+            # Deterministic score-descending, movie-ID-ascending tie break.
+            candidate_movie_ids = train_catalog[candidate_idx]
+            ranking = np.lexsort((candidate_movie_ids, -scores))[:k]
+            recommendations[user_id] = candidate_movie_ids[ranking].tolist()
+            if verbose and (j % 250 == 0 or j == len(users)):
+                print(f'Ranked {j:,}/{len(users):,} users', flush=True)
+    return recommendations
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', default='data/netflix_day_dev')
@@ -42,58 +105,14 @@ def main():
     model.eval()
 
     val = data['val']
-    v_users, _, v_devs, v_bins, v_daykeys, _ = data['v']
     selected = sorted(int(uid) for uid in val.userId.unique())
     if args.smoke_users > 0:
         selected = selected[:args.smoke_users]
     if not selected:
         raise ValueError('No validation users selected')
 
-    user_index = {int(uid): idx for idx, uid in enumerate(data['users'])}
-    train_catalog = np.asarray(data['items'], dtype=np.int64)
-    all_item_indices = np.arange(len(train_catalog), dtype=np.int64)
-    offsets = data['hist_offsets']
-    history = data['history_items']
-    recommendations = {}
-
-    # One recommendation snapshot per user, at their first validation date.
-    # Validation labels are used only by metrics.evaluate_ranking afterwards.
-    first_val_row = (
-        val.assign(_row=np.arange(len(val)))
-           .sort_values(['userId', 'timestamp', 'movieId'])
-           .groupby('userId', sort=False)['_row'].first().to_dict()
-    )
-
-    with torch.no_grad():
-        implicit = model.implicit_all()
-        for j, user_id in enumerate(selected, 1):
-            ui = user_index[user_id]
-            val_row = int(first_val_row[user_id])
-            dev = float(v_devs[val_row])
-            bin_id = int(v_bins[val_row])
-            day_key = int(v_daykeys[val_row])
-
-            already_rated = np.unique(history[offsets[ui]:offsets[ui+1]])
-            candidate_idx = np.setdiff1d(all_item_indices, already_rated,
-                                         assume_unique=True)
-            scores = np.empty(len(candidate_idx), dtype=np.float32)
-
-            for lo in range(0, len(candidate_idx), args.batch_size):
-                hi = min(lo + args.batch_size, len(candidate_idx))
-                n = hi - lo
-                U = torch.full((n,), ui, device=device, dtype=torch.long)
-                I = torch.as_tensor(candidate_idx[lo:hi], device=device, dtype=torch.long)
-                D = torch.full((n,), dev, device=device, dtype=torch.float32)
-                B = torch.full((n,), bin_id, device=device, dtype=torch.long)
-                K = torch.full((n,), day_key, device=device, dtype=torch.long)
-                scores[lo:hi] = model(U, I, D, B, K, implicit).clamp(1, 5).cpu().numpy()
-
-            # Deterministic score-descending, movie-ID-ascending tie break.
-            candidate_movie_ids = train_catalog[candidate_idx]
-            ranking = np.lexsort((candidate_movie_ids, -scores))[:20]
-            recommendations[user_id] = candidate_movie_ids[ranking].tolist()
-            if j % 250 == 0 or j == len(selected):
-                print(f'Ranked {j:,}/{len(selected):,} users', flush=True)
+    recommendations = recommend_timesvdpp(model, data, selected, k=20,
+                                          batch_size=args.batch_size, device=device)
 
     heldout = val[val.userId.isin(selected)]
     result = evaluate_ranking(recommendations, heldout, ks=(10, 20))
@@ -102,7 +121,7 @@ def main():
         'dataset': str(args.data),
         'checkpoint': str(args.checkpoint),
         'users_ranked': len(selected),
-        'catalog_movies': len(train_catalog),
+        'catalog_movies': len(data['items']),
         'candidate_protocol': 'train catalog excluding per-user train history',
         'timestamp_protocol': 'first validation day per user, fixed ranking snapshot',
         'smoke_test': args.smoke_users > 0,

@@ -1,7 +1,3 @@
-""" The Netflix Prize data stores rating dates (not times). Ties on the same day
-are sorted by movieId, matching data.py, but this does NOT imply true order.
-"""
-
 import argparse
 from collections import Counter
 from pathlib import Path
@@ -44,15 +40,16 @@ def iter_netflix_ratings(directory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--netflix-dir", type=Path,
-                        default=Path.home() / "Downloads" / "archive 2")
+                        default=Path("data/netflix/raw"))
     parser.add_argument("--out-dir", type=Path, default=Path("data/netflix_dev"))
     parser.add_argument("--sample-mod", type=int, default=100,
                         help="Keep user IDs divisible by this number (100 = ~1%%)")
     args = parser.parse_args()
     if args.sample_mod < 1:
         parser.error("--sample-mod must be >= 1")
-    if args.out_dir.resolve() in [Path("data/dev").resolve(), Path("data/full").resolve()]:
-        parser.error("Refusing to overwrite the MovieLens splits")
+    protected = [Path("data") / d / s for d in ("movielens", "netflix") for s in ("dev", "full")]
+    if args.out_dir.resolve() in [p.resolve() for p in protected]:
+        parser.error("Refusing to overwrite the data.py splits")
 
     start = time.perf_counter()
     item_counts = Counter()

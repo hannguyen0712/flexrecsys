@@ -1,0 +1,17 @@
+{
+  "model": "experimental_TimeSVD++",
+  "dataset": "data/movielens_day_dev",
+  "seed": 575,
+  "factors": 32,
+  "epochs": 8,
+  "lr": 0.003,
+  "weight_decay": 0.0001,
+  "batch_size": 4096,
+  "best_epoch": 8,
+  "best_validation_rmse": 0.8082318297018101,
+  "elapsed_seconds": 159.9,
+  "train_ratings": 829925,
+  "validation_ratings": 99895,
+  "unseen_validation_movies": 2023,
+  "notes": "Offline training-only implicit histories; no Recall/NDCG yet"
+}
