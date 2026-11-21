@@ -17,15 +17,6 @@ Users' preferences change over time. This module uses BOCPD to detect when prefe
 
 BOCPD maintains a probability distribution over "run length" — how many observations since the last changepoint.
 
-```
-User ratings:  [4, 5, 4, 5, 2, 1, 2, 1]
-                        ↑
-                   Preference shift detected
-
-Run length:    [1, 2, 3, 4, 1, 2, 3, 4]
-                        ↑
-                   Resets after changepoint
-```
 
 ### Key Concept: Run Length Posterior
 
@@ -34,7 +25,6 @@ At each time step, BOCPD computes `P(run_length | data)`:
 - **Low expected run length** → Recent shift → Trust recent behavior
 
 ### Blending Formula
-
 ```
 α = E[run_length] / T          # α ∈ [0, 1]
 p_final = α·p_long + (1-α)·p_short
