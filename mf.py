@@ -287,10 +287,63 @@ class MF:
 
     def user_vectors_from(self, ratings, reg=1.0):
         # refit p_u and b_u from any subset of ratings (e.g. one time window) with movies fixed.
-        # closed-form ridge regression per user, used for recent-vs-past embeddings
         Q = self.net.Q.weight.detach().cpu().numpy()
         b_i = self.net.b_i.weight.detach().cpu().numpy().ravel()
         return ridge_user_vectors(ratings, self.items, Q, b_i, float(self.net.mu), reg)
+
+    @torch.no_grad()
+    def predict_blended(self, df, short_term_vectors, alphas, batch_size=65536):
+        # Predict using α × long_embed + (1-α) × short_embed.
+        self.net.eval()
+        dev = self.device
+
+        # build short-term lookup
+        short_idx = {u: i for i, u in enumerate(short_term_vectors.userId.values)}
+        p_cols = [c for c in short_term_vectors.columns if c.startswith('p')]
+        P_short = torch.tensor(short_term_vectors[p_cols].values, dtype=torch.float32, device=dev)
+        b_u_short = torch.tensor(short_term_vectors.b_u.values, dtype=torch.float32, device=dev)
+
+        u_raw = df.userId.values
+        i_enc = self.items.encode(df.movieId)
+        u_enc = self.users.encode(df.userId)
+
+        out = []
+        for s in range(0, len(df), batch_size):
+            e = s + batch_size
+            ub, ib = u_enc[s:e], i_enc[s:e]
+            users_batch = u_raw[s:e]
+
+            ki = torch.tensor(ib >= 0, device=dev, dtype=torch.float32)
+            it = torch.tensor(np.maximum(ib, 0), device=dev)
+            q_i = self.net.Q(it)
+            bi = self.net.b_i(it).squeeze(-1) * ki
+
+            preds = []
+            for j, (user, u_idx, i_valid) in enumerate(zip(users_batch, ub, ki.cpu().numpy())):
+                alpha = alphas.get(user, 1.0)
+
+                if u_idx >= 0:
+                    p_long = self.net.P.weight[u_idx]
+                    bu_long = self.net.b_u.weight[u_idx, 0]
+                else:
+                    p_long = torch.zeros(self.n_factors, device=dev)
+                    bu_long = torch.tensor(0.0, device=dev)
+
+                if user in short_idx:
+                    p_sh = P_short[short_idx[user]]
+                    bu_sh = b_u_short[short_idx[user]]
+                else:
+                    p_sh, bu_sh = p_long, bu_long
+
+                p_blend = alpha * p_long + (1 - alpha) * p_sh
+                bu_blend = alpha * bu_long + (1 - alpha) * bu_sh
+
+                pred = self.net.mu + bu_blend + bi[j] + (p_blend * q_i[j]).sum()
+                preds.append(float(pred))
+
+            out.extend(preds)
+
+        return np.clip(np.array(out), *self.rating_scale)
 
 
 def ridge_user_vectors(ratings, items, Q, b_i, mu, reg=1.0):

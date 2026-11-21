@@ -1,0 +1,21 @@
+{
+  "dataset": "netflix",
+  "split": "dev",
+  "n_factors": 64,
+  "hazard": 0.01,
+  "min_short_ratings": 5,
+  "ridge_reg": 1.0,
+  "baseline_rmse": 0.851983959154195,
+  "blended_rmse": 0.8535926805454114,
+  "improvement_pct": -0.18882061967615288,
+  "n_users": 24582,
+  "users_with_changepoints": 4643,
+  "users_with_short_embed": 24582,
+  "alpha_mean": 0.770065839706614,
+  "alpha_std": 0.19488534541774846,
+  "alpha_lt_0.3": 1123,
+  "alpha_gt_0.7": 18641,
+  "train_time_sec": 110.1,
+  "bocpd_time_sec": 93.7,
+  "predict_time_sec": 170.3
+}
