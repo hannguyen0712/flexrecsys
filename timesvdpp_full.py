@@ -14,8 +14,12 @@ from metrics import rmse
 
 
 def setup_data(folder):
-    train = pd.read_parquet(folder / 'train.parquet')
-    val = pd.read_parquet(folder / 'val.parquet')
+    folder = Path(folder)
+    return setup_frames(pd.read_parquet(folder / 'train.parquet'),
+                        pd.read_parquet(folder / 'val.parquet'))
+
+
+def setup_frames(train, val):
     users = np.sort(train.userId.unique())
     items = np.sort(train.movieId.unique())
     user_map = {int(x): i for i, x in enumerate(users)}
@@ -62,8 +66,9 @@ def setup_data(folder):
 
 class TimeSVDpp(nn.Module):
     def __init__(self, n_users, n_items, n_bins, n_day_keys, hist_items, hist_offsets,
-                 mean, factors=32):
+                 mean, factors=32, ablate=()):
         super().__init__()
+        self.ablate = frozenset(ablate)
         self.p = nn.Embedding(n_users, factors)
         self.q = nn.Embedding(n_items, factors)
         self.y = nn.Embedding(n_items, factors)
@@ -92,28 +97,38 @@ class TimeSVDpp(nn.Module):
         # For CPU efficiency, gather each user's history via embedding_bag.
         # Called as a full-user operation and indexed afterwards: gradients still
         # flow through y and user histories remain training-only.
+        if 'implicit' in self.ablate:
+            return None
         return torch.nn.functional.embedding_bag(
             self.hist_items, self.y.weight, self.hist_offsets[:-1], mode='sum'
         ) * self.hist_scale.unsqueeze(1)
 
     def forward(self, u, i, dev, bins, day_keys, implicit):
-        user_vector = (self.p(u) + self.user_factor_alpha(u)*dev.unsqueeze(1)
-                       + self.user_day_factor(day_keys) + implicit[u])
-        score = (self.q(i)*user_vector).sum(dim=1)
-        return (self.global_mean + self.user_bias(u).squeeze(1)
-                + self.item_bias(i).squeeze(1)
-                + self.item_bin_bias(i*self.n_bins+bins).squeeze(1)
-                + self.user_alpha(u).squeeze(1)*dev
-                + self.user_day_bias(day_keys).squeeze(1)
-                + score)
+        a = self.ablate
+        user_vector = self.p(u)
+        if 'user_drift' not in a:
+            user_vector = user_vector + self.user_factor_alpha(u)*dev.unsqueeze(1)
+        if 'user_day' not in a:
+            user_vector = user_vector + self.user_day_factor(day_keys)
+        if 'implicit' not in a:
+            user_vector = user_vector + implicit[u]
+        out = (self.fallback(u, dev, day_keys) + self.item_bias(i).squeeze(1)
+               + (self.q(i)*user_vector).sum(dim=1))
+        if 'item_bin' not in a:
+            out = out + self.item_bin_bias(i*self.n_bins+bins).squeeze(1)
+        return out
 
     def fallback(self, u, dev, day_keys):
-        return (self.global_mean + self.user_bias(u).squeeze(1)
-                + self.user_alpha(u).squeeze(1)*dev
-                + self.user_day_bias(day_keys).squeeze(1))
+        a = self.ablate
+        out = self.global_mean + self.user_bias(u).squeeze(1)
+        if 'user_drift' not in a:
+            out = out + self.user_alpha(u).squeeze(1)*dev
+        if 'user_day' not in a:
+            out = out + self.user_day_bias(day_keys).squeeze(1)
+        return out
 
 
-def evaluate(model, v, device, batch_size=8192):
+def evaluate(model, v, device, batch_size=8192, rating_scale=(1, 5), return_pred=False):
     u,i,dev,b,day,r = v
     pred = np.empty(len(r),dtype=np.float32)
     model.eval()
@@ -131,8 +146,55 @@ def evaluate(model, v, device, batch_size=8192):
                 I=torch.tensor(i[lo:hi][mask],dtype=torch.long,device=device)
                 B=torch.tensor(b[lo:hi][mask],dtype=torch.long,device=device)
                 out[ix]=model(U[ix],I,D[ix],B,K[ix],implicit)
-            pred[lo:hi]=out.clamp(1,5).cpu().numpy()
-    return rmse(r,pred)
+            pred[lo:hi]=out.clamp(*rating_scale).cpu().numpy()
+    return (rmse(r,pred), pred) if return_pred else rmse(r,pred)
+
+
+def fit_timesvdpp(d, factors=32, epochs=8, batch_size=4096, lr=.003, weight_decay=.0001,
+                  device='cpu', rating_scale=(1, 5), checkpoint=None, verbose=True, ablate=(),
+                  select=True):
+    # trains on setup_data/setup_frames output, keeps the best-validation-epoch weights in memory.
+    # select=False keeps the last epoch instead, for when d['v'] is the test split
+    device=torch.device(device)
+    tu,ti,tdev,tbins,tkeys,tr=d['t']
+    model=TimeSVDpp(len(d['users']),len(d['items']),d['n_bins'],d['n_day_keys'],
+                    d['history_items'],d['hist_offsets'],float(tr.mean()),factors,ablate).to(device)
+    optimizer=torch.optim.Adam(model.parameters(),lr=lr,weight_decay=weight_decay)
+    ds=TensorDataset(*[
+        torch.tensor(x,dtype=(torch.float32 if idx in [2,5] else torch.long))
+        for idx,x in enumerate(d['t'])
+    ])
+    dl=DataLoader(ds,batch_size=batch_size,shuffle=True)
+    best=float('inf'); best_epoch=None; best_state=None; history=[]
+    for epoch in range(1,epochs+1):
+        model.train(); total=0.
+        # Computing implicit_all separately each minibatch is required for autograd after updates
+        # CPU-expensive reference
+        for U,I,D,B,K,R in dl:
+            U,I,D,B,K,R=[z.to(device) for z in (U,I,D,B,K,R)]
+            optimizer.zero_grad()
+            implicit=model.implicit_all()
+            prediction=model(U,I,D,B,K,implicit)
+            loss=((prediction-R)**2).mean()
+            loss.backward()
+            optimizer.step()
+            total+=((prediction.detach()-R)**2).sum().item()
+        score=evaluate(model,d['v'],device,rating_scale=rating_scale)
+        history.append({'epoch':epoch,'train_rmse':float(np.sqrt(total/len(tr))),'val_rmse':score})
+        if verbose:
+            print(f'Epoch {epoch:02d} | Train RMSE {np.sqrt(total/len(tr)):.5f} | '
+                  f'Validation RMSE {score:.5f}',flush=True)
+        if not select:
+            best,best_epoch=score,epoch
+        elif score<best:
+            best,best_epoch=score,epoch
+            best_state={k:v.detach().clone() for k,v in model.state_dict().items()}
+            if checkpoint:
+                Path(checkpoint).parent.mkdir(exist_ok=True)
+                torch.save(model.state_dict(),checkpoint)
+    if select:
+        model.load_state_dict(best_state)
+    return model, best, best_epoch, history
 
 
 def main():
@@ -147,42 +209,15 @@ def main():
     p.add_argument('--device',default='cpu')
     args=p.parse_args()
     set_seed(args.seed)
-    device=torch.device(args.device)
     d=setup_data(Path(args.data))
-    tu,ti,tdev,tbins,tkeys,tr=d['t']
+    tr=d['t'][-1]
     print(f"Train: {len(tr):,} | Validation: {len(d['v'][-1]):,} | "
           f"Users: {len(d['users']):,} | Movies: {len(d['items']):,}",flush=True)
     print(f"Unseen validation movies: {(d['v'][1]<0).sum():,}",flush=True)
-    model=TimeSVDpp(len(d['users']),len(d['items']),d['n_bins'],d['n_day_keys'],
-                    d['history_items'],d['hist_offsets'],float(tr.mean()),args.factors).to(device)
-    optimizer=torch.optim.Adam(model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
-    ds=TensorDataset(*[
-        torch.tensor(x,dtype=(torch.float32 if idx in [2,5] else torch.long))
-        for idx,x in enumerate(d['t'])
-    ])
-    dl=DataLoader(ds,batch_size=args.batch_size,shuffle=True)
-    best=float('inf'); best_epoch=None
     start=time.time()
-    for epoch in range(1,args.epochs+1):
-        model.train(); total=0.
-        # Computing implicit_all separately each minibatch is required for
-        # autograd after updates. This is a faithful but CPU-expensive reference.
-        for U,I,D,B,K,R in dl:
-            U,I,D,B,K,R=[z.to(device) for z in (U,I,D,B,K,R)]
-            optimizer.zero_grad()
-            implicit=model.implicit_all()
-            prediction=model(U,I,D,B,K,implicit)
-            loss=((prediction-R)**2).mean()
-            loss.backward()
-            optimizer.step()
-            total+=((prediction.detach()-R)**2).sum().item()
-        score=evaluate(model,d['v'],device)
-        print(f'Epoch {epoch:02d} | Train RMSE {np.sqrt(total/len(tr)):.5f} | '
-              f'Validation RMSE {score:.5f}',flush=True)
-        if score<best:
-            best,best_epoch=score,epoch
-            Path('results').mkdir(exist_ok=True)
-            torch.save(model.state_dict(),'results/timesvdpp_netflix_best.pt')
+    _,best,best_epoch,_=fit_timesvdpp(d,args.factors,args.epochs,args.batch_size,args.lr,
+                                      args.weight_decay,args.device,
+                                      checkpoint='results/timesvdpp_netflix_best.pt')
     output=dict(model='experimental_TimeSVD++',dataset=args.data,seed=args.seed,
                 factors=args.factors,epochs=args.epochs,lr=args.lr,
                 weight_decay=args.weight_decay,batch_size=args.batch_size,
@@ -190,7 +225,8 @@ def main():
                 elapsed_seconds=round(time.time()-start,1),
                 train_ratings=len(tr),validation_ratings=len(d['v'][-1]),
                 unseen_validation_movies=int((d['v'][1]<0).sum()),
-                notes='Offline training-only implicit histories; no Recall/NDCG yet')
+                notes='Offline training-only implicit histories; ranking metrics come from '
+                      'evaluate_timesvdpp_ranking.py')
     Path('results/timesvdpp_netflix_validation.json').write_text(json.dumps(output,indent=2))
     print('Saved results/timesvdpp_netflix_validation.json',flush=True)
 
