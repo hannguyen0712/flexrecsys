@@ -1,0 +1,21 @@
+{
+  "dataset": "movielens",
+  "split": "dev",
+  "n_factors": 64,
+  "hazard": 0.01,
+  "min_short_ratings": 5,
+  "ridge_reg": 1.0,
+  "baseline_rmse": 0.7821458876386631,
+  "blended_rmse": 0.7895390256154348,
+  "improvement_pct": -0.9452377227337861,
+  "n_users": 2591,
+  "users_with_changepoints": 557,
+  "users_with_short_embed": 2591,
+  "alpha_mean": 0.7468443086652892,
+  "alpha_std": 0.2050729674651425,
+  "alpha_lt_0.3": 143,
+  "alpha_gt_0.7": 1882,
+  "train_time_sec": 4.4,
+  "bocpd_time_sec": 13.7,
+  "predict_time_sec": 22.5
+}

@@ -1,0 +1,70 @@
+{
+  "dataset": "netflix",
+  "split": "dev",
+  "method": "binary_weighting",
+  "n_factors": 64,
+  "baseline_rmse": 0.8519839602289254,
+  "weighted_rmse": 0.851512349944646,
+  "improvement_pct": 0.055354361853564044,
+  "n_users": 24582,
+  "users_with_changepoints": 6930,
+  "best_base_weight": 0.5,
+  "best_hazard": 0.03333333333333333,
+  "sweep": {
+    "base_weight_results": [
+      {
+        "base_weight": 0.0,
+        "rmse": 0.9600995386765008
+      },
+      {
+        "base_weight": 0.1,
+        "rmse": 0.8704472022583979
+      },
+      {
+        "base_weight": 0.25,
+        "rmse": 0.8567368440843415
+      },
+      {
+        "base_weight": 0.5,
+        "rmse": 0.8509242946363057
+      },
+      {
+        "base_weight": 0.75,
+        "rmse": 0.8518218350973338
+      },
+      {
+        "base_weight": 1.0,
+        "rmse": 0.8519876289103188
+      }
+    ],
+    "hazard_results": [
+      {
+        "hazard": 0.05,
+        "rmse": 0.8512717110449717,
+        "users_with_cp": 13256
+      },
+      {
+        "hazard": 0.03333333333333333,
+        "rmse": 0.8507927838675714,
+        "users_with_cp": 9994
+      },
+      {
+        "hazard": 0.02,
+        "rmse": 0.8518232180105638,
+        "users_with_cp": 6930
+      },
+      {
+        "hazard": 0.013333333333333334,
+        "rmse": 0.8517133740779065,
+        "users_with_cp": 5407
+      },
+      {
+        "hazard": 0.01,
+        "rmse": 0.8519885117372379,
+        "users_with_cp": 4643
+      }
+    ]
+  },
+  "best_rmse": 0.8507927838675714,
+  "best_improvement_pct": 0.1398120641888555
+}
