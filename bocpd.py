@@ -39,14 +39,14 @@ def compute_residuals(model, train_df):
     # Compute prediction errors: residual = actual - predicted.
     predictions = model.predict(train_df)
     residuals = train_df["rating"].values - predictions
-    return train_df[["userId", "timestamp"]].assign(residual=residuals)
+    return train_df[["userId", "timestamp", "movieId"]].assign(residual=residuals)
 
 
 def detect_user_changepoints(residuals_df, hazard=1/50):
     # Detect changepoints per user where MAP run length drops > 5.
     changepoints = {}
     for user, group in residuals_df.groupby('userId'):
-        group = group.sort_values('timestamp')
+        group = group.sort_values(['timestamp', 'movieId'])
         _, _, map_rl = bocpd(group.residual.values, hazard=hazard)
         drops = [t for t in range(1, len(map_rl)) if map_rl[t] < map_rl[t-1] - 5]
         changepoints[user] = drops
@@ -54,14 +54,11 @@ def detect_user_changepoints(residuals_df, hazard=1/50):
 
 
 def generate_weights(train_df, changepoints, base_weight=0.5, post_cp_weight=1.0):
-    # Binary weighting: base_weight before last CP, post_cp_weight after.
-    weights = np.full(len(train_df), base_weight)
+    weights = np.full(len(train_df), post_cp_weight)
     for user, cp_times in changepoints.items():
-        user_mask = train_df.userId == user
-        user_idx = train_df[user_mask].sort_values('timestamp').index
         if cp_times:
-            last_cp = cp_times[-1]
-            weights[user_idx[last_cp:]] = post_cp_weight
+            user_idx = train_df[train_df.userId == user].sort_values(['timestamp', 'movieId']).index
+            weights[user_idx[:cp_times[-1]]] = base_weight
     return weights
 
 
@@ -71,7 +68,7 @@ def compute_user_blending_weights(residuals_df, hazard=1/50, method='expected_rl
     changepoint_indices = {}
 
     for user, group in residuals_df.groupby('userId'):
-        group = group.sort_values('timestamp')
+        group = group.sort_values(['timestamp', 'movieId'])
         x = group.residual.values
         T = len(x)
         if T < 2:

@@ -297,6 +297,41 @@ def plot_at_k(res, per_user=None, out=None):
     return fig
 
 
+def plot_shift_curve(curve, refs, models, out):
+    # left: gain over mf-refit against the share of synthetic users shifted.
+    # right: the same gains against the excess flagged share (flagged minus flagged after
+    # shuffling), which is measured the same way on real data, with MovieLens and Netflix added
+    colors = [OURS_COLOR, BASE_COLOR, MUTED]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    for ax, xcol, xlabel in ((axes[0], "shift_frac", "synthetic users with a planted shift (%)"),
+                             (axes[1], "excess_flagged", "users flagged beyond the shuffled rate (%)")):
+        _style(ax)
+        ax.grid(axis="y", color=GRID, linewidth=0.6)
+        ax.axhline(0, color=AXIS, linewidth=1)
+        c = curve.sort_values(xcol)
+        for m, color, marker in zip(models, colors, BASE_MARKERS):
+            x = 100 * c[xcol]
+            ax.errorbar(x, c[m], yerr=[c[m] - c[f"{m}_lo"], c[f"{m}_hi"] - c[m]], color=color,
+                        marker=marker, markersize=5, linewidth=1.5, capsize=3, label=m)
+        ax.set_xlabel(xlabel, color=INK_2, fontsize=9)
+    axes[0].set_ylabel("Recall@10 change over mf-refit (%)", color=INK_2, fontsize=9)
+    for _, r in refs.iterrows():
+        x, y = 100 * r.excess_flagged, r.flexrecsys
+        axes[1].errorbar([x], [y], yerr=[[y - r.flexrecsys_lo], [r.flexrecsys_hi - y]],
+                         color=INK, marker="*", markersize=11, capsize=3, linestyle="none")
+        axes[1].annotate(f"{r.dataset}, flexrecsys", (x, y), textcoords="offset points",
+                         xytext=(-8, 8), ha="right", fontsize=8, color=INK)
+    axes[0].legend(frameon=False, fontsize=8, labelcolor=INK_2)
+    fig.suptitle("When does change-point weighting pay off?", color=INK, fontsize=11, x=0.01,
+                 ha="left")
+    fig.tight_layout()
+    paths = [Path(f"{out}.png"), Path(f"{out}.pdf")]
+    for p in paths:
+        fig.savefig(p, dpi=200, facecolor="white")
+    plt.close(fig)
+    return paths
+
+
 def render_all(json_path):
     json_path = Path(json_path)
     res, per_user = load_results(json_path)

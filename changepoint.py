@@ -215,3 +215,79 @@ def time_decay_weights(train, half_life_days=180.0, floor=0.0):
     last = train.groupby("userId")["timestamp"].transform("max").to_numpy()
     age = (last - train.timestamp.to_numpy()) / 86_400
     return np.maximum(0.5 ** (age / half_life_days), floor)
+
+# shift diagnostics: whether the detector's flags are real, and what changes at a detected change?
+
+def mean_interval(x, n_boot=4000, seed=0):
+    # mean and 95% bootstrap interval
+    x = np.asarray(x, float)
+    means = x[np.random.default_rng(seed).integers(0, len(x), (n_boot, len(x)))].mean(1)
+    return float(x.mean()), *(float(v) for v in np.percentile(means, [2.5, 97.5]))
+
+
+def shuffle_within_users(train, seed=0):
+    # placebo: random rating order per user, so every change still flagged is a false alarm
+    rng = np.random.default_rng(seed)
+    return train.assign(timestamp=train.groupby("userId").timestamp.transform(
+        lambda s: rng.permutation(s.to_numpy())))
+
+
+def _window(train, diag, max_k, after):
+    # the k ratings just before (or just after) each user's detected change
+    df = train.sort_values(["userId", "timestamp", "movieId"])
+    pos = df.groupby("userId").cumcount()
+    d = diag[diag.map_cut >= 0].set_index("userId")
+    cut = df.userId.map(d.map_cut)
+    k = np.minimum(np.minimum(cut, df.userId.map(d.n_ratings) - cut), max_k)
+    keep = (pos >= cut) & (pos < cut + k) if after else (pos >= cut - k) & (pos < cut)
+    return df[keep & (k >= 5)]
+
+
+def before_after_gap(model, train, val, diag, reg, max_k=50):
+    items = model.item_embeddings()
+    Q = items.filter(regex=r"^q\d+$").to_numpy()
+    b_i = items["b_i"].to_numpy()
+    idx = model.items.encode(val.movieId)
+    v, idx = val[idx >= 0], idx[idx >= 0]
+
+    def user_mse(ratings):
+        vec = model.user_vectors_from(ratings, reg).set_index("userId")
+        u = v.userId.to_numpy()
+        pred = (float(model.net.mu) + b_i[idx] + vec.b_u.reindex(u).to_numpy()
+                + (vec.filter(regex=r"^p\d+$").reindex(u).to_numpy() * Q[idx]).sum(1))
+        return pd.Series((v.rating.to_numpy() - pred) ** 2).groupby(u).mean()
+
+    return (user_mse(_window(train, diag, max_k, False))
+            - user_mse(_window(train, diag, max_k, True))).dropna()
+
+
+def genre_shift(train, movies, diag, max_k=50, n_perm=50, seed=0):
+    # Jensen-Shannon divergence between the genre mix before and after the change, minus its average over random splits of the same ratings
+    rng = np.random.default_rng(seed)
+    names = sorted({g for gs in movies.genres for g in gs})
+    col = {g: j for j, g in enumerate(names)}
+    G = np.zeros((len(movies), len(names)))
+    for r, gs in enumerate(movies.genres):
+        G[r, [col[g] for g in gs]] = 1.0 / len(gs)
+    table = pd.DataFrame(G, index=movies.movieId.to_numpy(), columns=names)
+
+    def js(a, b):
+        p, q = a.mean(0), b.mean(0)
+        p, q = p / max(p.sum(), 1e-12), q / max(q.sum(), 1e-12)
+        m = (p + q) / 2
+        kl = lambda x: float((x[x > 0] * np.log2(x[x > 0] / m[x > 0])).sum())
+        return (kl(p) + kl(q)) / 2
+
+    before, after = _window(train, diag, max_k, False), _window(train, diag, max_k, True)
+    rows, moves = [], []
+    for user, a in after.groupby("userId"):
+        b = before[before.userId == user]
+        Gb = table.reindex(b.movieId).fillna(0.0).to_numpy()
+        Ga = table.reindex(a.movieId).fillna(0.0).to_numpy()
+        both, k = np.vstack([Gb, Ga]), len(Gb)
+        null = [js(*np.split(both[rng.permutation(2 * k)], [k])) for _ in range(n_perm)]
+        real = js(Gb, Ga)
+        rows.append((user, real - np.mean(null), real > np.percentile(null, 95)))
+        moves.append(Ga.mean(0) - Gb.mean(0))
+    out = pd.DataFrame(rows, columns=["userId", "excess", "beyond_chance"]).set_index("userId")
+    return out, pd.DataFrame(moves, index=out.index, columns=names)

@@ -1,0 +1,109 @@
+{
+  "tag": "final_test_oldmf",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "mf": "MF"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "test",
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "heldout_ratings": 108757,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "test",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "final_test_oldmf",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 64,
+    "reg": 0.05,
+    "lr": 0.005,
+    "batch_size": 4096,
+    "epochs": 30,
+    "mf_wd": 0.0,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.804959605736283,
+        "recall@10": 0.014266729640125205,
+        "ndcg@10": 0.014012647961588213,
+        "recall@20": 0.01649645607391145,
+        "ndcg@20": 0.014540042360188285,
+        "n_users": 2571,
+        "seconds": 8.4,
+        "epochs_run": 9
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8049040097208533,
+        "recall@10": 0.014306396745136535,
+        "ndcg@10": 0.014610211645624252,
+        "recall@20": 0.018181771083164093,
+        "ndcg@20": 0.015935569406370628,
+        "n_users": 2571,
+        "seconds": 7.1,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8049617141598205,
+        "recall@10": 0.013496230853290363,
+        "ndcg@10": 0.014762277848296404,
+        "recall@20": 0.017035598121609877,
+        "ndcg@20": 0.01563033951585586,
+        "n_users": 2571,
+        "seconds": 7.8,
+        "epochs_run": 9
+      }
+    ]
+  }
+}

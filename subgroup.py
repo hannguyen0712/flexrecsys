@@ -1,5 +1,3 @@
-# does the regime weighting help the users the detector flags?
-
 import sys
 
 import numpy as np
@@ -27,6 +25,10 @@ if __name__ == "__main__":
     pu = pd.read_csv(f"{stem}_per_user.csv")
     p_change = pd.read_csv(f"{stem}_flags.csv").groupby("userId").p_change.mean()
     flagged = p_change.index[p_change > 0.5]
+    n_train = pd.read_csv(f"{stem}_flags.csv").groupby("userId").n_ratings.first()
+    q1, q2 = n_train.quantile([1 / 3, 2 / 3])
+    thirds = [("short history", n_train.min(), q1), ("medium history", q1 + 1, q2),
+              ("long history", q2 + 1, n_train.max())]
     print(f"{len(flagged)} of {len(p_change)} users flagged (mean p_change over seeds > 0.5)")
 
     metrics = [m for m in ["mse", "recall@10", "ndcg@10"] if m in pu]
@@ -40,3 +42,8 @@ if __name__ == "__main__":
         print("  all users      ", paired(d))
         print("  flagged users  ", paired(d[hit]))
         print("  unflagged users", paired(d[~hit]))
+        # history length: thirds of users by number of training ratings
+        for label, lo, hi in thirds:
+            rows = d.index.isin(n_train.index[(n_train >= lo) & (n_train <= hi)])
+            print(f"  {label} ({lo:.0f}-{hi:.0f} ratings)".ljust(34), paired(d[rows]))
+            print("      of which flagged".ljust(34), paired(d[rows & hit]))

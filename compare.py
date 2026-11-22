@@ -8,8 +8,8 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
-from changepoint import (changepoint_weights, fit_regime_prior, regime_weights,
-                         time_decay_weights)
+from changepoint import (before_after_gap, changepoint_weights, fit_regime_prior, genre_shift,
+                         mean_interval, regime_weights, shuffle_within_users, time_decay_weights)
 from data import RATING_SCALE, SEED, load_dir, load_split, set_seed
 from metrics import per_user_scores, rmse
 import plots
@@ -23,6 +23,8 @@ DEFAULT_MODELS = [m for m in ALL_MODELS
 SHIFT_GRID = [0.3, 1, 3, 10, 30, 100, 300]
 OURS = "flexrecsys"
 USER_REG_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
+RECIPES = {"wd": dict(factors=32, reg=0.0, lr=3e-3, epochs=8, mf_wd=1e-4),
+           "old": dict(factors=64, reg=0.05, lr=5e-3, epochs=30, mf_wd=0.0)}
 LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "MF, users refit",
           "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
           "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
@@ -105,21 +107,64 @@ def run_decay_refit(train, val, args, cache, ev):
     return *outputs(m, ev, args), {"mean_weight": float(w.mean())}
 
 
+def detect(base, train, args):
+    if args.regime_prior == "auto":
+        reg, noise = fit_regime_prior(base, train, args.cp_components)
+        noise = noise if args.cp_noise is None else args.cp_noise
+    else:
+        reg, noise = args.cp_reg, args.cp_noise
+    w, diag = regime_weights(base, train, prior=args.cp_prior, n_components=args.cp_components,
+                             reg=reg, min_seg=args.cp_min_seg, floor=args.regime_floor,
+                             noise=noise, return_diagnostics=True)
+    return w, diag, reg
+
+
 def regime_fit(base, train, args, cache):
-    # detector output, computed once per seed and shared by flexrecsys and flexrecsys-soft
+    # detector output, computed once per seed and shared by every flexrecsys variant
     if "regime" not in cache:
-        if args.regime_prior == "auto":
-            reg, noise = fit_regime_prior(base, train, args.cp_components)
-            noise = noise if args.cp_noise is None else args.cp_noise
-        else:
-            reg, noise = args.cp_reg, args.cp_noise
-        w, diag = regime_weights(base, train, prior=args.cp_prior,
-                                 n_components=args.cp_components, reg=reg,
-                                 min_seg=args.cp_min_seg, floor=args.regime_floor, noise=noise,
-                                 return_diagnostics=True)
-        cache["regime"] = (w, diag, reg)
-        cache["cp_diag"] = diag
+        cache["regime"] = detect(base, train, args)
+        cache["cp_diag"] = cache["regime"][1]
     return cache["regime"]
+
+
+def diagnose(train, val, data_name, args, cache):
+    base = base_mf(train, val, args, cache)
+    diag = regime_fit(base, train, args, cache)[1]
+    flagged = set(diag.userId[diag.p_change > 0.5])
+    placebo = detect(base, shuffle_within_users(train), args)[1]
+    out = {"flagged_share": float((diag.p_change > 0.5).mean()),
+           "flagged_share_shuffled": float((placebo.p_change > 0.5).mean())}
+    print("\n[diagnostics]")
+    print(f"  flagged {out['flagged_share']:.1%} of users; "
+          f"{out['flagged_share_shuffled']:.1%} after shuffling each user's rating order "
+          f"(all false alarms)")
+
+    def groups(series, key):
+        for name, part in (("flagged", series[series.index.isin(flagged)]),
+                           ("unflagged", series[~series.index.isin(flagged)])):
+            if len(part):
+                m, lo, hi = out[f"{key}_{name}"] = mean_interval(part)
+                print(f"    {name:9s} {m:+.4f} [{lo:+.4f}, {hi:+.4f}]  n={len(part)}")
+
+    print("  validation error from the ratings before the change minus after it "
+          "(positive: post-change ratings predict better)")
+    groups(before_after_gap(base, train, val, diag, base.user_reg_), "before_after")
+
+    if data_name.startswith("movielens"):
+        from data import load_movies
+        shift, moves = genre_shift(train, load_movies("movielens"), diag)
+        print("  genre mix moved at the change, beyond random splits of the same ratings")
+        groups(shift.excess, "genre_excess")
+        beyond = shift.beyond_chance.groupby(shift.index.isin(flagged)).mean()
+        out["genre_beyond_chance"] = {"flagged": float(beyond.get(True, np.nan)),
+                                      "unflagged": float(beyond.get(False, np.nan))}
+        print(f"    users beyond chance (5% expected): flagged {beyond.get(True, np.nan):.1%}, "
+              f"unflagged {beyond.get(False, np.nan):.1%}")
+        top = moves[moves.index.isin(flagged)].abs().mean().nlargest(5)
+        out["genres_moving_most"] = top.round(4).to_dict()
+        print("    genres moving most for flagged users: "
+              + ", ".join(f"{g} {v:.3f}" for g, v in top.items()))
+    return out
 
 
 def run_flexrecsys_soft(train, val, args, cache, ev):
@@ -224,7 +269,8 @@ RUNNERS = {"bias": run_bias, "mf": run_mf, "mf-refit": run_mf_refit, "mf-decay":
 def load_data(args):
     if args.synthetic:
         from synthetic import make_split
-        train, val, test, truth = make_split(n_users=args.syn_users, n_items=args.syn_items)
+        train, val, test, truth = make_split(n_users=args.syn_users, n_items=args.syn_items,
+                                             shift_frac=args.shift_frac[0])
         return train, val, test, "synthetic", truth
     if args.data:
         train, val, test = load_dir(args.data)
@@ -251,10 +297,65 @@ def detection_quality(diag, train, truth):
     d = diag.set_index("userId").join(t["shift_in_train"]).dropna()
     flagged = d.p_change > 0.5
     y = d.shift_in_train.astype(bool)
-    return {"auc": float(roc_auc_score(y, d.p_change)),
+    auc = float(roc_auc_score(y, d.p_change)) if y.nunique() == 2 else float("nan")
+    return {"auc": auc,
             "precision": float((flagged & y).sum() / max(flagged.sum(), 1)),
             "recall": float((flagged & y).sum() / max(y.sum(), 1)),
             "users_with_shift_in_train": int(y.sum()), "users": int(len(d))}
+
+
+def gain_vs_refit(per_user, model, metric="recall@10"):
+    # % change over mf-refit, paired by user after averaging seeds, with a 95% interval
+    w = per_user.groupby(["userId", "model"])[metric].mean().unstack()
+    d = (w[model] - w["mf-refit"]).dropna()
+    base = w["mf-refit"].reindex(d.index).mean()
+    return tuple(100 * v / base for v in mean_interval(d))
+
+
+def shift_point(out, per_user, models):
+    # one point of the shift curve: excess flagged share (flagged minus shuffled) and the gains
+    d = out.get("diagnostics", {})
+    row = {"excess_flagged": d.get("flagged_share", np.nan) - d.get("flagged_share_shuffled", np.nan)}
+    for m in models:
+        if m.startswith("flexrecsys") and m in set(per_user.model):
+            row[m], row[f"{m}_lo"], row[f"{m}_hi"] = gain_vs_refit(per_user, m)
+    return row
+
+
+def run_shift_sweep(args):
+    # synthetic runs at several shares of shifted users, then the curve of gain over mf-refit,
+    # with MovieLens and Netflix added where results/ml_diagnose and netflix_diagnose exist
+    base_tag = args.tag or "syn_shift"
+    rows = []
+    for frac in args.shift_frac:
+        a = copy.copy(args)
+        a.shift_frac, a.tag = [frac], f"{base_tag}_{round(frac * 100)}"
+        print(f"\n========== {frac:.0%} of synthetic users shifted ==========")
+        out = run(a)
+        row = shift_point(out, pd.read_csv(RESULTS_DIR / f"{a.tag}_per_user.csv"), args.models)
+        det = out.get("changepoint_detection") or [{}]
+        row.update(shift_frac=frac, auc=float(np.nanmean([x.get("auc", np.nan) for x in det])))
+        rows.append(row)
+    curve = pd.DataFrame(rows)
+
+    refs = []
+    for name, ref in (("MovieLens", "ml_diagnose"), ("Netflix", "netflix_diagnose")):
+        js, pu = RESULTS_DIR / f"{ref}.json", RESULTS_DIR / f"{ref}_per_user.csv"
+        if js.exists() and pu.exists():
+            refs.append({"dataset": name, **shift_point(json.loads(js.read_text()),
+                                                        pd.read_csv(pu), ["flexrecsys"])})
+    refs = pd.DataFrame(refs)
+
+    curve.to_csv(RESULTS_DIR / f"{base_tag}_curve.csv", index=False)
+    paths = plots.plot_shift_curve(curve, refs, [m for m in args.models if m in curve],
+                                   RESULTS_DIR / f"{base_tag}_curve")
+    cols = ["shift_frac", "excess_flagged", "auc"] + [m for m in args.models if m in curve]
+    print("\nRecall@10 change over mf-refit (%), by share of synthetic users shifted")
+    print(curve[cols].round(3).to_string(index=False))
+    if len(refs):
+        print(refs[["dataset", "excess_flagged", "flexrecsys"]].round(3).to_string(index=False))
+    print(f"saved {base_tag}_curve.csv, " + ", ".join(p.name for p in paths))
+    return curve
 
 
 def run(args):
@@ -270,7 +371,7 @@ def run(args):
           f"Scoring on {ev.name}.")
 
     runs = {m: [] for m in args.models}
-    per_user, detection, flags = [], [], []
+    per_user, detection, flags, diagnostics = [], [], [], None
     for seed in args.seeds:
         cache = {}
         # deterministic models only need one seed
@@ -298,6 +399,10 @@ def run(args):
         if truth is not None and "cp_diag" in cache:
             detection.append({"seed": seed, **detection_quality(cache["cp_diag"], train, truth)})
             print("  change-point detection vs planted shifts:", detection[-1])
+        if (not args.no_diagnose and seed == args.seeds[0]
+                and any(m.startswith("flexrecsys") for m in args.models)):
+            set_seed(seed)
+            diagnostics = diagnose(train, val, data_name, args, cache)
 
     out = {"tag": tag, "dataset": data_name, "ours": OURS if OURS in args.models else None,
            "labels": {m: LABELS[m] for m in args.models}, "ks": args.k,
@@ -309,6 +414,8 @@ def run(args):
            "runs": runs}
     if detection:
         out["changepoint_detection"] = detection
+    if diagnostics:
+        out["diagnostics"] = diagnostics
 
     RESULTS_DIR.mkdir(exist_ok=True)
     json_path = RESULTS_DIR / f"{tag}.json"
@@ -325,7 +432,8 @@ def run(args):
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
     src = ap.add_mutually_exclusive_group()
-    src.add_argument("--data", help="folder with train/val/test.parquet, e.g. data/netflix_day_dev")
+    src.add_argument("--data", help="folder with train/val/test.parquet, e.g. netflix_day_dev "
+                                    "(looked up under data/ if not a path)")
     src.add_argument("--synthetic", action="store_true", help="planted-shift synthetic data")
     ap.add_argument("--dataset", default="movielens", choices=list(RATING_SCALE))
     ap.add_argument("--split", default="dev")
@@ -334,20 +442,23 @@ def parse_args(argv=None):
     ap.add_argument("--eval", default="val", choices=["val", "test"],
                     help="split to score on; test is for the final frozen configuration only")
     ap.add_argument("--rating-scale", type=float, nargs=2, default=None)
-    ap.add_argument("--models", nargs="+", default=DEFAULT_MODELS, choices=ALL_MODELS)
-    ap.add_argument("--seeds", type=int, nargs="+", default=[575])
+    ap.add_argument("--models", nargs="+", choices=ALL_MODELS,
+                    help="default: every main model, or mf-refit and flexrecsys for a shift sweep")
+    ap.add_argument("--seeds", type=int, nargs="+", default=[575, 576, 577])
     ap.add_argument("--k", type=int, nargs="+", default=[10, 20])
     ap.add_argument("--tag", help="output name under results/ (default compare_<data>)")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--verbose", action="store_true", help="print per-epoch training lines")
     g = ap.add_argument_group("MF (shared by mf, mf-decay, flexrecsys)")
-    g.add_argument("--factors", type=int, default=64)
-    g.add_argument("--reg", type=float, default=0.05)
-    g.add_argument("--lr", type=float, default=5e-3)
+    g.add_argument("--recipe", default="wd", choices=list(RECIPES),
+                   help="wd: Adam weight decay, the final configuration (default). "
+                        "old: the original per-batch L2 recipe")
+    g.add_argument("--factors", type=int)
+    g.add_argument("--reg", type=float)
+    g.add_argument("--lr", type=float)
     g.add_argument("--batch-size", type=int, default=4096)
-    g.add_argument("--epochs", type=int, default=30)
-    g.add_argument("--mf-wd", type=float, default=0.0,
-                   help="Adam weight decay for MF, as TimeSVD++ uses (pair with --reg 0)")
+    g.add_argument("--epochs", type=int)
+    g.add_argument("--mf-wd", type=float, help="Adam weight decay for MF")
     g = ap.add_argument_group("time decay baseline")
     g.add_argument("--half-life", type=float, default=180.0, help="days")
     g.add_argument("--decay-floor", type=float, default=0.0)
@@ -363,6 +474,9 @@ def parse_args(argv=None):
                         "auto picks it per seed from USER_REG_GRID by validation NDCG@10 of mf-refit")
     g.add_argument("--user-reg-metric", default="ndcg", choices=["ndcg", "rmse"],
                    help="validation metric that auto user-reg optimises")
+    g.add_argument("--no-diagnose", action="store_true",
+                   help="skip the flag checks (placebo, before/after, genre shift on MovieLens) "
+                        "that run on the first seed whenever a flexrecsys model is included")
     g.add_argument("--regime-prior", default="auto", choices=["auto", "fixed"],
                    help="auto fits the detector's prior strength and noise to the training ratings; "
                         "fixed uses --cp-reg and --cp-noise")
@@ -382,9 +496,20 @@ def parse_args(argv=None):
     g.add_argument("--tsvd-raw-rank", action="store_true",
                    help="rank on raw scores instead of scores clamped to the rating scale")
     g = ap.add_argument_group("synthetic data")
+    g.add_argument("--shift-frac", type=float, nargs="+", default=[0.5],
+                   help="share of users with a planted shift; several values (e.g. "
+                        "0 0.25 0.5 0.75 1) run a sweep and plot the gain over mf-refit against it")
     g.add_argument("--syn-users", type=int, default=1500)
     g.add_argument("--syn-items", type=int, default=1200)
     args = ap.parse_args(argv)
+    if args.models is None:
+        sweep = args.synthetic and len(args.shift_frac) > 1
+        args.models = ["mf-refit", "flexrecsys", "flexrecsys-soft"] if sweep else DEFAULT_MODELS
+    for key, value in RECIPES[args.recipe].items():
+        if getattr(args, key) is None:
+            setattr(args, key, value)
+    if args.data and not Path(args.data).exists() and (Path("data") / args.data).exists():
+        args.data = str(Path("data") / args.data)
     if args.rating_scale is None:
         netflix = args.data and "netflix" in str(args.data)
         args.rating_scale = list(RATING_SCALE["netflix" if netflix else args.dataset])
@@ -395,4 +520,10 @@ def parse_args(argv=None):
 
 
 if __name__ == "__main__":
-    run(parse_args())
+    args = parse_args()
+    if args.synthetic and len(args.shift_frac) > 1:
+        if "mf-refit" not in args.models:
+            raise SystemExit("a shift sweep compares against mf-refit, so include it in --models")
+        run_shift_sweep(args)
+    else:
+        run(args)

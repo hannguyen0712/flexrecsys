@@ -1,0 +1,362 @@
+{
+  "tag": "netflix_test",
+  "dataset": "netflix_day_dev",
+  "ours": "flexrecsys",
+  "labels": {
+    "bias": "Bias baseline",
+    "mf": "MF",
+    "mf-refit": "MF, users refit",
+    "decay-refit": "Time decay, users refit",
+    "timesvdpp": "TimeSVD++",
+    "flexrecsys": "flexrecsys (ours)",
+    "flexrecsys-soft": "flexrecsys, soft update",
+    "flexrecsys-level": "flexrecsys, level update"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "test",
+  "data": {
+    "train_ratings": 641771,
+    "val_ratings": 72023,
+    "heldout_ratings": 68394,
+    "users": 2393,
+    "movies": 14453
+  },
+  "settings": {
+    "data": "data/netflix_day_dev",
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "test",
+    "rating_scale": [
+      1.0,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "netflix_test",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "bias": [
+      {
+        "seed": 575,
+        "val_rmse": 0.9225131128880963,
+        "recall@10": 0.04207740672026387,
+        "ndcg@10": 0.04608548966899709,
+        "recall@20": 0.042749885691665275,
+        "ndcg@20": 0.04214685523235422,
+        "n_users": 2310,
+        "seconds": 0.2
+      }
+    ],
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.9079707249670687,
+        "recall@10": 0.05464698000412286,
+        "ndcg@10": 0.05906339355416124,
+        "recall@20": 0.05625459454627963,
+        "ndcg@20": 0.055451955857785395,
+        "n_users": 2310,
+        "seconds": 5.2,
+        "epochs_run": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.9079878812600382,
+        "recall@10": 0.055098261526832955,
+        "ndcg@10": 0.05863062652976111,
+        "recall@20": 0.05503936901714434,
+        "ndcg@20": 0.054217026182169205,
+        "n_users": 2310,
+        "seconds": 4.2,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.9078081363925516,
+        "recall@10": 0.055227616299044865,
+        "ndcg@10": 0.059611943844208856,
+        "recall@20": 0.05492150330053913,
+        "ndcg@20": 0.054979269679479505,
+        "n_users": 2310,
+        "seconds": 4.1,
+        "epochs_run": 8
+      }
+    ],
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.903895927847122,
+        "recall@10": 0.06336580086580086,
+        "ndcg@10": 0.064803344154989,
+        "recall@20": 0.0671217646670986,
+        "ndcg@20": 0.06286289408979995,
+        "n_users": 2310,
+        "seconds": 0.3,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.9038764760970459,
+        "recall@10": 0.06258262901120044,
+        "ndcg@10": 0.06465898194852975,
+        "recall@20": 0.06719316539961066,
+        "ndcg@20": 0.06268380498041387,
+        "n_users": 2310,
+        "seconds": 0.2,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.9014934302803733,
+        "recall@10": 0.060790558647701505,
+        "ndcg@10": 0.06382100644807545,
+        "recall@20": 0.0674183752234494,
+        "ndcg@20": 0.06295841552745292,
+        "n_users": 2310,
+        "seconds": 0.2,
+        "user_reg": 1.0
+      }
+    ],
+    "decay-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8996399420781798,
+        "recall@10": 0.06323455644884216,
+        "ndcg@10": 0.06547925979154988,
+        "recall@20": 0.06751946407840824,
+        "ndcg@20": 0.06360511916096229,
+        "n_users": 2310,
+        "seconds": 0.3,
+        "mean_weight": 0.5332268434442515
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8997417623122709,
+        "recall@10": 0.06187057651343366,
+        "ndcg@10": 0.06453372428531823,
+        "recall@20": 0.06643347681399027,
+        "ndcg@20": 0.06268162108893187,
+        "n_users": 2310,
+        "seconds": 0.3,
+        "mean_weight": 0.5332268434442515
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8973322077827159,
+        "recall@10": 0.061623376623376636,
+        "ndcg@10": 0.06449727325079392,
+        "recall@20": 0.06741985418169529,
+        "ndcg@20": 0.06294121170507472,
+        "n_users": 2310,
+        "seconds": 0.3,
+        "mean_weight": 0.5332268434442515
+      }
+    ],
+    "timesvdpp": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8864364035118225,
+        "recall@10": 0.04725108225108225,
+        "ndcg@10": 0.047218288771113545,
+        "recall@20": 0.05422289226267755,
+        "ndcg@20": 0.048673328334664624,
+        "n_users": 2310,
+        "seconds": 166.2,
+        "best_epoch": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8857962549621311,
+        "recall@10": 0.053224421081563944,
+        "ndcg@10": 0.054309031560980534,
+        "recall@20": 0.0595045298802687,
+        "ndcg@20": 0.05396405987231125,
+        "n_users": 2310,
+        "seconds": 164.0,
+        "best_epoch": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8848635226617338,
+        "recall@10": 0.04796931904074761,
+        "ndcg@10": 0.0462662651190469,
+        "recall@20": 0.058400766138794365,
+        "ndcg@20": 0.049391456712631406,
+        "n_users": 2310,
+        "seconds": 205.2,
+        "best_epoch": 8
+      }
+    ],
+    "flexrecsys": [
+      {
+        "seed": 575,
+        "val_rmse": 0.9080743998910541,
+        "recall@10": 0.06197038411324126,
+        "ndcg@10": 0.0634007993752081,
+        "recall@20": 0.06609795431465249,
+        "ndcg@20": 0.061626113332278784,
+        "n_users": 2310,
+        "seconds": 3.4,
+        "mean_weight": 0.8276367692479921,
+        "detector_reg": 1.0,
+        "users_flagged": 569,
+        "users": 2393
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.9077038846109509,
+        "recall@10": 0.0623349137634852,
+        "ndcg@10": 0.06412589208434837,
+        "recall@20": 0.06641385594548917,
+        "ndcg@20": 0.06197109040540781,
+        "n_users": 2310,
+        "seconds": 3.0,
+        "mean_weight": 0.8278624517344895,
+        "detector_reg": 1.0,
+        "users_flagged": 573,
+        "users": 2393
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.9048985340540366,
+        "recall@10": 0.05963203463203463,
+        "ndcg@10": 0.0630482765848804,
+        "recall@20": 0.06658822375420019,
+        "ndcg@20": 0.062382611730395165,
+        "n_users": 2310,
+        "seconds": 3.6,
+        "mean_weight": 0.8258846891875102,
+        "detector_reg": 1.0,
+        "users_flagged": 574,
+        "users": 2393
+      }
+    ],
+    "flexrecsys-soft": [
+      {
+        "seed": 575,
+        "val_rmse": 0.9033433706494611,
+        "recall@10": 0.06304834054834055,
+        "ndcg@10": 0.06454801161480471,
+        "recall@20": 0.0674725302024164,
+        "ndcg@20": 0.06294034758883219,
+        "n_users": 2310,
+        "seconds": 1.8,
+        "shift_mult": 100.0,
+        "mean_weight": 0.8276367692479921,
+        "users_flagged": 569,
+        "users": 2393
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.9024528532853917,
+        "recall@10": 0.062496048924620365,
+        "ndcg@10": 0.06461904784701078,
+        "recall@20": 0.06718576298961085,
+        "ndcg@20": 0.06272604748547245,
+        "n_users": 2310,
+        "seconds": 1.8,
+        "shift_mult": 300.0,
+        "mean_weight": 0.8278624517344895,
+        "users_flagged": 573,
+        "users": 2393
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.899980630055701,
+        "recall@10": 0.06061258846973133,
+        "ndcg@10": 0.06359546062677064,
+        "recall@20": 0.06745047631481631,
+        "ndcg@20": 0.06289113125571018,
+        "n_users": 2310,
+        "seconds": 1.8,
+        "shift_mult": 100.0,
+        "mean_weight": 0.8258846891875102,
+        "users_flagged": 574,
+        "users": 2393
+      }
+    ],
+    "flexrecsys-level": [
+      {
+        "seed": 575,
+        "val_rmse": 0.9061557847532132,
+        "recall@10": 0.06336580086580086,
+        "ndcg@10": 0.064803344154989,
+        "recall@20": 0.0671217646670986,
+        "ndcg@20": 0.06286289408979995,
+        "n_users": 2310,
+        "seconds": 0.4,
+        "mean_weight": 0.8276367692479921,
+        "users_flagged": 569,
+        "users": 2393
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.9056678581861083,
+        "recall@10": 0.06258262901120044,
+        "ndcg@10": 0.06465898194852975,
+        "recall@20": 0.06719316539961066,
+        "ndcg@20": 0.06268380498041387,
+        "n_users": 2310,
+        "seconds": 0.3,
+        "mean_weight": 0.8278624517344895,
+        "users_flagged": 573,
+        "users": 2393
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.903415232320552,
+        "recall@10": 0.060790558647701505,
+        "ndcg@10": 0.06382100644807545,
+        "recall@20": 0.0674183752234494,
+        "ndcg@20": 0.06295841552745292,
+        "n_users": 2310,
+        "seconds": 0.4,
+        "mean_weight": 0.8258846891875102,
+        "users_flagged": 574,
+        "users": 2393
+      }
+    ]
+  }
+}
