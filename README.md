@@ -2,8 +2,7 @@
 
 Detecting preference shifts in matrix factorization recommenders.
 
-Most time-aware recommenders assume user tastes drift smoothly and down-weight old ratings with a continuous decay. With flexrecsys, we instead treat preference changes as discrete events. The system locates a change point in each user's rating history with a Bayesian test and re-estimates the user from the ratings that follow it.
-sys-level` | Keeps the full-history taste vector, re-estimates only the user bias from post-change ratings |
+Most time-aware recommenders assume user tastes drift smoothly and down-weight old ratings with a continuous decay. flexrecsys instead treats preference changes as discrete events: it locates a change point in each user's rating history with a Bayesian test and re-estimates the user from the ratings that follow it.
 
 The system has three stages:
 
@@ -11,15 +10,15 @@ The system has three stages:
 2. **Detect change points**: for each user, the probability that their taste changed, and where.
 3. **Re-solve each user exactly** with the movie vectors frozen, using the change points to decide how much each rating counts.
 
-Without stage 2, every rating counts fully under flexrecsys (mf-refit only) model. The other models differ in how stage 2 is done or how its output is used; see [The flexrecsys models](#the-flexrecsys-models).
+Every model built on these stages is named "flexrecsys (method)". Without stage 2, every rating counts fully: that is flexrecsys (mf-refit only). The other models differ in how stage 2 is done or how its output is used; see [The flexrecsys models](#the-flexrecsys-models).
 
 ## Summary of results
 
 1. **flexrecsys out-ranks TimeSVD++ on two datasets, without its change-point stage.** flexrecsys (mf-refit only) beats TimeSVD++ on held-out test Recall@10 by 20% on MovieLens (0.0742 against 0.0616, paired difference +0.0126, 95% interval +0.0084 to +0.0166) and by 26% on Netflix (0.0622 against 0.0495, paired difference +0.0128, interval +0.0087 to +0.0168). It trains in about 6 seconds against 140. TimeSVD++ keeps the better RMSE on both.
 2. **The original gap to TimeSVD++ was a regularization artifact.** Switching off every time-aware component of TimeSVD++ leaves its ranking unchanged. Training plain MF with the same regularization closes the gap.
-3. **The change-point stage does not help on MovieLens or Netflix.** Three detectors were tried: online BOCPD on embedding windows (the proposal's method), online BOCPD on prediction errors, and an offline rating-space test. No variant gives a confirmed improvement over flexrecsys (mf-refit only). The only candidate is a 0.15% validation RMSE gain for one setting of flexrecsys (residual BOCPD, binary weights), chosen from a sweep and not yet checked on held-out data or on ranking. Discarding pre-change ratings makes flagged users worse on both datasets.
-4. **The detector finds real changes, but they are gradual and do not last.** It flags 35% of MovieLens users against 5% when each user's rating order is shuffled. On MovieLens, flagged users' post-change ratings predict their future better than their pre-change ratings, and their genre mix moves more than unflagged users'. The moves are shifts in the balance of common genres, and a user's full history still predicts their future better than the post-change history does.
-5. **flexrecsys (soft update) avoids the loss but does not gain.** It chose strong pulls toward each user's full-history profile (x30 to x300) and matched flexrecsys (mf-refit only), including on the Netflix test split (0.0621 against 0.0622 Recall@10). The strength is chosen on validation data, and this variant has not been scored on the MovieLens test split.
+3. **The change-point stage does not help on MovieLens or Netflix.** Three detectors were tried: online BOCPD on embedding windows (the proposal's method), online BOCPD on prediction errors, and an offline rating-space test. No variant gives a confirmed improvement over flexrecsys (mf-refit only). The only candidate is a 0.15% validation RMSE gain for one setting of flexrecsys (residual BOCPD, binary weights) on MovieLens, chosen from a sweep and not checked on held-out data or on ranking; on Netflix every setting that down-weights pre-change ratings is worse. Discarding pre-change ratings makes flagged users worse on both datasets, and again on 2,600 MovieLens users never used during development.
+4. **The detector finds real changes, but they are gradual and do not last.** It flags 35% of MovieLens users against 5% when each user's rating order is shuffled, and every flag check gives the same result on the fresh users. On MovieLens, flagged users' post-change ratings predict their future better than their pre-change ratings, and their genre mix moves more than unflagged users'. The moves are shifts in the balance of common genres, and a user's full history still predicts their future better than the post-change history does.
+5. **flexrecsys (soft update) avoids the loss but does not gain.** It chose strong pulls toward each user's full-history profile (x30 to x300) and matched flexrecsys (mf-refit only) on held-out data: on the Netflix test split (0.0621 against 0.0622 Recall@10) and on the fresh MovieLens users (0.0766 against 0.0771, paired difference −0.0005, interval −0.0012 to +0.0002).
 
 ## Setup
 
@@ -46,7 +45,7 @@ python data.py netflix           # Netflix Prize, downloaded from Kaggle
 
 The Netflix Prize data requires a Kaggle account and API token (`~/.kaggle/kaggle.json`). It contains about 100M ratings; use `--dev-only` on machines with less than 16 GB of RAM.
 
-Users need at least 50 ratings spanning 180 days, movies at least 5 ratings. Each user's ratings are split chronologically 80/10/10 into train, validation and test. The `dev` split is a fixed 10% sample of users. All MovieLens results below use it: 851,711 train, 105,443 validation and 108,757 test ratings from 2,591 users and 20,634 movies.
+Users need at least 50 ratings spanning 180 days, movies at least 5 ratings. Each user's ratings are split chronologically 80/10/10 into train, validation and test. The `dev` split is a fixed 10% sample of users. All MovieLens results below use it (851,711 train, 105,443 validation and 108,757 test ratings from 2,591 users and 20,634 movies), except one check on fresh users from outside it.
 
 ## Method
 
@@ -105,6 +104,7 @@ The test tables below were produced with:
 python compare.py --eval test --models bias mf mf-refit decay-refit timesvdpp flexrecsys --regime-prior fixed --tag final_test
 python compare.py --data netflix_day_dev --eval test --models bias mf mf-refit decay-refit timesvdpp flexrecsys flexrecsys-soft flexrecsys-level --tag netflix_test
 python compare.py --eval test --recipe old --models mf --tag final_test_oldmf
+python compare.py --fresh-users 2600 --eval test --models mf mf-refit flexrecsys-soft flexrecsys --tag fresh_soft
 ```
 
 Each run writes `results/<tag>.json`, per-user scores, a figure (PNG and PDF) and tables (Markdown, LaTeX, CSV). When a variant with a detector is included it also writes `<tag>_flags.csv` and, on the first seed, runs the flag checks reported below (placebo, before/after, and the genre shift on MovieLens), saved under `diagnostics` in the JSON. `--no-diagnose` skips them.
@@ -144,6 +144,21 @@ Intervals are ±1 standard deviation over seeds, except the bias baseline (deter
 - Time decay does not improve on the unweighted refit either.
 - Longer histories do not help. flexrecsys (hard update) loses Recall@10 for flagged users with short (40 to 142 ratings), medium (143 to 316) and long (317 or more) histories: by 0.0035 (interval −0.0103 to +0.0024), 0.0128 (−0.0181 to −0.0079) and 0.0081 (−0.0142 to −0.0020).
 
+### MovieLens, fresh users, test split
+
+2,600 MovieLens users from outside the dev sample, never used for any choice in this project: 845,696 train, 104,664 validation and 108,027 test ratings, 21,558 movies. The frozen configuration, three seeds, test scored once. TimeSVD++ was not run on these users.
+
+| Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
+|:---|---:|---:|---:|---:|---:|
+| MF | 0.8463 ± 0.0001 | 0.0630 ± 0.0005 | 0.0703 ± 0.0002 | 0.0660 ± 0.0004 | 0.0666 ± 0.0003 |
+| flexrecsys (mf-refit only) | **0.8323 ± 0.0006** | **0.0771 ± 0.0013** | **0.0851 ± 0.0012** | **0.0822 ± 0.0009** | **0.0820 ± 0.0009** |
+| flexrecsys (hard update) | 0.8538 ± 0.0010 | 0.0746 ± 0.0011 | 0.0831 ± 0.0010 | 0.0793 ± 0.0012 | 0.0794 ± 0.0010 |
+| flexrecsys (soft update) | 0.8384 ± 0.0007 | 0.0766 ± 0.0009 | 0.0844 ± 0.0008 | 0.0818 ± 0.0009 | 0.0816 ± 0.0008 |
+
+- The dev-sample results hold. flexrecsys (hard update) is below flexrecsys (mf-refit only) on Recall@10 by 0.0025 (95% interval 0.0008 to 0.0041), with the loss again confined to flagged users (0.0073 lower, interval 0.0026 to 0.0117; unflagged users +0.0002, interval −0.0003 to +0.0007).
+- flexrecsys (soft update) chose the strongest pull toward full history (x300) on all three seeds and matches flexrecsys (mf-refit only): Recall@10 −0.0005 (interval −0.0012 to +0.0002).
+- The flag checks replicate: 35.0% of users flagged against 5.2% after shuffling; the post-change profile predicts flagged users better by 0.290 squared error (interval 0.193 to 0.390) against 0.136 (0.088 to 0.186) for unflagged users; the genre mix moves by 0.045 (0.040 to 0.049) against 0.037 (0.034 to 0.040), with 44.8% of flagged and 30.6% of unflagged users beyond chance.
+
 ### Netflix, test split
 
 A 1% sample of Netflix Prize users with day-aware splits (`data/netflix_day_dev`): 641,771 train, 72,023 validation and 68,394 test ratings from 2,393 users and 14,453 movies. The configuration frozen on MovieLens was run unchanged, on the 1 to 5 rating scale and with the fitted detector prior. Three seeds, test scored once.
@@ -182,7 +197,7 @@ The project's first results had TimeSVD++ ranking four to five times better than
 
 No component of TimeSVD++ matters for ranking; implicit feedback matters for RMSE. Adam weight decay shrinks every movie's parameters on every step, which keeps rarely rated movies out of the top of the ranking. On test the original MF recipe scores 0.0140 Recall@10 against 0.0588 for the weight-decay recipe.
 
-The two measures pull against each other throughout. The original MF recipe has the best test RMSE of any model (0.8049) and the worst ranking. Training TimeSVD++ for 30 epochs instead of 8 improves its validation RMSE from 0.7820 to 0.7762 and lowers its Recall@10 from 0.0585 to 0.0460.
+The two measures pull against each other throughout. The original MF recipe has the best test RMSE of any model (0.8049) and the worst ranking. Training TimeSVD++ for 30 epochs instead of 8 improves its validation RMSE from 0.7820 to 0.7762 and lowers its Recall@10 from 0.0585 to 0.0460. Training it for 4 epochs lowers Recall@10 to 0.0512, so 8 epochs is its best ranking setting of the three.
 
 ### The change-point stage on MovieLens
 
@@ -222,11 +237,21 @@ Online change-point detection on each user's prediction errors from MF trained w
 | flexrecsys (residual BOCPD, binary weights), pre-change ratings dropped (weight 0) | 0.8240 |
 | flexrecsys (residual BOCPD, blending), hazard 1/100 | 0.7895 |
 
+| Netflix (24,582 users) | RMSE |
+|:---|---:|
+| MF | 0.8520 |
+| flexrecsys (residual BOCPD, binary weights), default settings (pre-change weight 0.5, hazard 1/50) | 0.8560 |
+| flexrecsys (residual BOCPD, binary weights), pre-change weight 0.75 | 0.8530 |
+| flexrecsys (residual BOCPD, binary weights), pre-change weight 1.0 (no down-weighting) | 0.8519 |
+| flexrecsys (residual BOCPD, binary weights), pre-change ratings dropped (weight 0) | 0.8925 |
+| flexrecsys (residual BOCPD, blending), hazard 1/100 | 0.8536 |
+
 - Retraining with identical weights moves RMSE by about 0.0002 (MF against weight 1.0; the default settings run twice give 0.7825 and 0.7823).
 - The best binary-weights setting is 0.0012 (0.15%) below MF, which is beyond that noise. It was selected from 11 settings on the validation set it is reported on, from one seed, and has not been checked on test data or on ranking. The effect is not monotone in the hazard rate (1/30 and 1/50 are worse than 1/75).
-- Down-weighting pre-change ratings more strongly than 0.5 makes RMSE clearly worse.
-- Blending is worse than MF on both datasets (Netflix: 0.8536 against 0.8520). It blends every user, including those with no detected change, and it mixes a vector trained by SGD with one fitted by ridge regression, so part of the loss may come from that mismatch rather than from the shift.
-- An earlier version of `generate_weights` gave users with no detected change the pre-change weight on all their ratings; the MovieLens numbers above come from the corrected code. The Netflix binary-weights sweep (24,582 users) has not been rerun with the fix.
+- Down-weighting pre-change ratings more strongly than 0.5 makes RMSE clearly worse on MovieLens.
+- On Netflix the MovieLens gain does not replicate: RMSE gets steadily worse as pre-change ratings are down-weighted more, and the best setting is no down-weighting at all. The script's hazard sweep then runs at that setting, where every rating keeps weight 1 whatever the hazard, so its spread (0.8518 to 0.8523) is retraining noise and its reported best (+0.02%) is not a gain.
+- Blending is worse than MF on both datasets. It blends every user, including those with no detected change, and it mixes a vector trained by SGD with one fitted by ridge regression, so part of the loss may come from that mismatch rather than from the shift.
+- An earlier version of `generate_weights` gave users with no detected change the pre-change weight on all their ratings. All binary-weights numbers above come from the corrected code.
 
 ### Implementation check on generated data
 
@@ -240,13 +265,12 @@ python compare.py --synthetic --models mf-refit flexrecsys
 
 ## Limitations
 
-- Small samples of two datasets: 10% of eligible MovieLens users and 1% of Netflix users.
+- Small samples of two datasets: two samples of about 2,600 MovieLens users and 1% of Netflix users. The comparison with TimeSVD++ was not repeated on the fresh MovieLens users.
 - Netflix records dates, not times, so ratings made on the same day have no true order; ties are broken by movie ID.
-- The strength of flexrecsys (soft update) is chosen on the same validation data it is scored on.
 - There is no ground truth for preference shifts in either dataset, so on real data the detector is checked indirectly (placebo, before/after, genre shift). It is checked against known changes only on generated data.
-- Many variants were tried against the same MovieLens validation data. Only the frozen configuration in the MovieLens test table was scored on that test split. The fitted detector prior and the soft and level updates were developed after that run; on MovieLens they have validation results only, and their held-out results come from Netflix.
+- Many variants were tried against the same MovieLens validation data. The dev-sample test split was scored once, for the frozen configuration; the fitted detector prior and the soft and level updates were developed afterwards and were checked on held-out data using the Netflix test split and the fresh MovieLens users. The level update was not run on the fresh users.
 - The refit strength is chosen for ranking. Choosing it for RMSE gives better rating accuracy and worse ranking.
-- The TimeSVD++ implementation is an unverified prototype with default hyperparameters. Its epoch count was not tuned for ranking.
+- The TimeSVD++ implementation is an unverified prototype with default hyperparameters. Of the epoch counts tried (4, 8 and 30), the one used (8) ranks best.
 - The rating-space detector allows at most one change per user.
 - The flag checks cannot separate a change in rating level from a change in taste; the two are entangled in the user profile. The genre shift covers taste only on MovieLens, since Netflix has no genre data.
 - The residual BOCPD results are single-seed, RMSE-only and use the original MF recipe, so they are not directly comparable with the `compare.py` tables.

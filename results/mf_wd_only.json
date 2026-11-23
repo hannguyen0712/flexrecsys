@@ -1,0 +1,93 @@
+{
+  "tag": "mf_wd_only",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "bias": "Bias baseline",
+    "mf": "MF"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "mf_wd_only",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 64,
+    "reg": 0.0,
+    "lr": 0.005,
+    "batch_size": 4096,
+    "epochs": 30,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "bias": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8250156438202092,
+        "recall@10": 0.030543985390321094,
+        "ndcg@10": 0.03255080592923395,
+        "recall@20": 0.03802476992003923,
+        "ndcg@20": 0.03489126334184316,
+        "n_users": 2538,
+        "seconds": 0.3
+      }
+    ],
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8126744937130873,
+        "recall@10": 0.05434756776364341,
+        "ndcg@10": 0.05428482490937879,
+        "recall@20": 0.06302394883099748,
+        "ndcg@20": 0.0565353179095246,
+        "n_users": 2538,
+        "seconds": 12.9,
+        "epochs_run": 19
+      }
+    ]
+  }
+}

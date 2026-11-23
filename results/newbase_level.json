@@ -1,0 +1,187 @@
+{
+  "tag": "newbase_level",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "mf": "MF",
+    "mf-refit": "flexrecsys (mf-refit only)",
+    "flexrecsys-level": "flexrecsys, level update"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "val",
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "heldout_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "val",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "newbase_level",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8137681365638205,
+        "recall@10": 0.05283578495753437,
+        "ndcg@10": 0.05436383751006005,
+        "recall@20": 0.06269857137077858,
+        "ndcg@20": 0.05721322921509954,
+        "n_users": 2538,
+        "seconds": 6.7,
+        "epochs_run": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8136028721080683,
+        "recall@10": 0.05285751810574506,
+        "ndcg@10": 0.05477000648370152,
+        "recall@20": 0.06243192535753047,
+        "ndcg@20": 0.05740819914221948,
+        "n_users": 2538,
+        "seconds": 5.8,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8135312559185294,
+        "recall@10": 0.053633344590791394,
+        "ndcg@10": 0.05484839670822666,
+        "recall@20": 0.0637326228090268,
+        "ndcg@20": 0.05766995624206965,
+        "n_users": 2538,
+        "seconds": 5.3,
+        "epochs_run": 8
+      }
+    ],
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7950219591859927,
+        "recall@10": 0.07411097351995698,
+        "ndcg@10": 0.07616081919067633,
+        "recall@20": 0.08453099366279401,
+        "ndcg@20": 0.07795124649291967,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.7947489933385311,
+        "recall@10": 0.07363425144158005,
+        "ndcg@10": 0.07530817100325293,
+        "recall@20": 0.08336750495941626,
+        "ndcg@20": 0.07698518458540729,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.794568043179208,
+        "recall@10": 0.07368193928477616,
+        "ndcg@10": 0.07653802282779672,
+        "recall@20": 0.08294058612333832,
+        "ndcg@20": 0.07781076126648638,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.1
+      }
+    ],
+    "flexrecsys-level": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7993518575223822,
+        "recall@10": 0.07411097351995698,
+        "ndcg@10": 0.07616081919067633,
+        "recall@20": 0.08453099366279401,
+        "ndcg@20": 0.07795124649291967,
+        "n_users": 2538,
+        "seconds": 4.7,
+        "mean_weight": 0.7662778698515551,
+        "users_flagged": 907,
+        "users": 2591
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.7990287641607584,
+        "recall@10": 0.07363425144158005,
+        "ndcg@10": 0.07530817100325293,
+        "recall@20": 0.08336750495941626,
+        "ndcg@20": 0.07698518458540729,
+        "n_users": 2538,
+        "seconds": 4.0,
+        "mean_weight": 0.7608183109565886,
+        "users_flagged": 929,
+        "users": 2591
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.7985742946021724,
+        "recall@10": 0.07368193928477616,
+        "ndcg@10": 0.07653802282779672,
+        "recall@20": 0.08294058612333832,
+        "ndcg@20": 0.07781076126648638,
+        "n_users": 2538,
+        "seconds": 4.0,
+        "mean_weight": 0.7613430050306339,
+        "users_flagged": 926,
+        "users": 2591
+      }
+    ]
+  }
+}

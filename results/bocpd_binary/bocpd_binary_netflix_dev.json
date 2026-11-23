@@ -3,68 +3,68 @@
   "split": "dev",
   "method": "binary_weighting",
   "n_factors": 64,
-  "baseline_rmse": 0.8519839602289254,
-  "weighted_rmse": 0.851512349944646,
-  "improvement_pct": 0.055354361853564044,
+  "baseline_rmse": 0.8519839595035303,
+  "weighted_rmse": 0.855951029324585,
+  "improvement_pct": -0.4656272899041851,
   "n_users": 24582,
-  "users_with_changepoints": 6930,
-  "best_base_weight": 0.5,
-  "best_hazard": 0.03333333333333333,
+  "users_with_changepoints": 6910,
+  "best_base_weight": 1.0,
+  "best_hazard": 0.05,
   "sweep": {
     "base_weight_results": [
       {
         "base_weight": 0.0,
-        "rmse": 0.9600995386765008
+        "rmse": 0.8925421556678208
       },
       {
         "base_weight": 0.1,
-        "rmse": 0.8704472022583979
+        "rmse": 0.8728294776808245
       },
       {
         "base_weight": 0.25,
-        "rmse": 0.8567368440843415
+        "rmse": 0.8635319827527785
       },
       {
         "base_weight": 0.5,
-        "rmse": 0.8509242946363057
+        "rmse": 0.8560972739292788
       },
       {
         "base_weight": 0.75,
-        "rmse": 0.8518218350973338
+        "rmse": 0.8529528016379591
       },
       {
         "base_weight": 1.0,
-        "rmse": 0.8519876289103188
+        "rmse": 0.8519423387325389
       }
     ],
     "hazard_results": [
       {
         "hazard": 0.05,
-        "rmse": 0.8512717110449717,
-        "users_with_cp": 13256
+        "rmse": 0.8517800508946058,
+        "users_with_cp": 13354
       },
       {
         "hazard": 0.03333333333333333,
-        "rmse": 0.8507927838675714,
-        "users_with_cp": 9994
+        "rmse": 0.8519723395528525,
+        "users_with_cp": 9998
       },
       {
         "hazard": 0.02,
-        "rmse": 0.8518232180105638,
-        "users_with_cp": 6930
+        "rmse": 0.8519334292434194,
+        "users_with_cp": 6910
       },
       {
         "hazard": 0.013333333333333334,
-        "rmse": 0.8517133740779065,
-        "users_with_cp": 5407
+        "rmse": 0.8522793751024045,
+        "users_with_cp": 5439
       },
       {
         "hazard": 0.01,
-        "rmse": 0.8519885117372379,
-        "users_with_cp": 4643
+        "rmse": 0.8520512553910388,
+        "users_with_cp": 4623
       }
     ]
   },
-  "best_rmse": 0.8507927838675714,
-  "best_improvement_pct": 0.1398120641888555
+  "best_rmse": 0.8517800508946058,
+  "best_improvement_pct": 0.02393338591061254
 }

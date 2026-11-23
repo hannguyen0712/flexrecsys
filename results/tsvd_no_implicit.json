@@ -1,0 +1,81 @@
+{
+  "tag": "tsvd_no_implicit",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "timesvdpp": "TimeSVD++"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "tsvd_no_implicit",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 64,
+    "reg": 0.05,
+    "lr": 0.005,
+    "batch_size": 4096,
+    "epochs": 30,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [
+      "implicit"
+    ],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "timesvdpp": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8082622078778602,
+        "recall@10": 0.059684541008418086,
+        "ndcg@10": 0.059472600126562226,
+        "recall@20": 0.07093259561933855,
+        "ndcg@20": 0.06267055700055316,
+        "n_users": 2538,
+        "seconds": 69.5,
+        "best_epoch": 8
+      }
+    ]
+  }
+}

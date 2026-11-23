@@ -23,13 +23,11 @@ DEFAULT_MODELS = [m for m in ALL_MODELS
 SHIFT_GRID = [0.3, 1, 3, 10, 30, 100, 300]
 OURS = "flexrecsys"
 USER_REG_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000, 3000]
+# MF training settings. "wd" (Adam weight decay) is the final configuration; "old" is the
+# original per-batch L2 recipe. any of these can still be set one by one, e.g. --factors 64
 RECIPES = {"wd": dict(factors=32, reg=0.0, lr=3e-3, epochs=8, mf_wd=1e-4),
            "old": dict(factors=64, reg=0.05, lr=5e-3, epochs=30, mf_wd=0.0)}
-LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "MF, users refit",
-          "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
-          "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
-          "flexrecsys-soft": "flexrecsys, soft update",
-          "flexrecsys-level": "flexrecsys, level update", "flexrecsys": "flexrecsys (ours)"}
+LABELS = plots.LABELS
 
 
 def make_mf(args, verbose):
@@ -128,6 +126,8 @@ def regime_fit(base, train, args, cache):
 
 
 def diagnose(train, val, data_name, args, cache):
+    # are the flags real (placebo, before/after), and do the genres move (MovieLens only)?
+    # always scored on val, so --eval test never touches test here
     base = base_mf(train, val, args, cache)
     diag = regime_fit(base, train, args, cache)[1]
     flagged = set(diag.userId[diag.p_change > 0.5])

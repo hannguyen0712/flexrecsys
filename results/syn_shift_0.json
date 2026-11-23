@@ -3,7 +3,7 @@
   "dataset": "synthetic",
   "ours": "flexrecsys",
   "labels": {
-    "mf-refit": "MF, users refit",
+    "mf-refit": "flexrecsys (mf-refit only)",
     "flexrecsys": "flexrecsys (ours)",
     "flexrecsys-soft": "flexrecsys, soft update"
   },

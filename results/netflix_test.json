@@ -5,7 +5,7 @@
   "labels": {
     "bias": "Bias baseline",
     "mf": "MF",
-    "mf-refit": "MF, users refit",
+    "mf-refit": "flexrecsys (mf-refit only)",
     "decay-refit": "Time decay, users refit",
     "timesvdpp": "TimeSVD++",
     "flexrecsys": "flexrecsys (ours)",

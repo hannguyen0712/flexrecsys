@@ -1,8 +1,4 @@
 # python plots.py results/compare_movielens_dev.json
-#
-# intervals: std over seeds when a model ran with >= 2 seeds, otherwise a 95% bootstrap CI over
-# users (ranking metrics only; RMSE gets no interval from a single seed).
-# the delta row is ours minus the best baseline per metric, paired bootstrap over the same users.
 
 import json
 import sys
@@ -16,6 +12,27 @@ import numpy as np
 import pandas as pd
 
 OURS_COLOR = "#2a78d6"
+# display names, shared with compare.py; they override the names stored in older results files
+LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "flexrecsys (mf-refit only)",
+          "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
+          "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys (window BOCPD)",
+          "flexrecsys-soft": "flexrecsys (soft update)",
+          "flexrecsys-level": "flexrecsys (level update)", "flexrecsys": "flexrecsys (hard update)"}
+
+
+def is_flex(model):
+    return model == "mf-refit" or model.startswith("flexrecsys")
+
+
+def model_labels(res):
+    return {**res.get("labels", {}), **{k: v for k, v in LABELS.items() if k in res["runs"]}}
+
+
+def model_order(res):
+    # comparison methods first, then the flexrecsys models, with the reference model last
+    flex = [m for m in res["runs"] if is_flex(m)]
+    flex = [m for m in flex if m != "mf-refit"] + [m for m in flex if m == "mf-refit"]
+    return [m for m in res["runs"] if not is_flex(m)] + flex
 BASE_COLOR = "#52514e"
 INK, INK_2, MUTED = "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS, SURFACE = "#e1e0d9", "#c3c2b7", "#fcfcfb"
@@ -116,12 +133,9 @@ def _fmt(mean, lo, hi, digits):
 def comparison_table(res, per_user=None, fmt="markdown", digits=4):
     # fmt: "df" (numbers), "markdown", "latex" or "csv"; best value per column is bolded
     summary = summarize(res, per_user)
-    labels = res.get("labels", {})
+    labels = model_labels(res)
     metrics = [m for m in metric_list(res) if m in set(summary.metric)]
-    order = list(res["runs"])
-    ours = res.get("ours")
-    if ours in order:
-        order = [m for m in order if m != ours] + [ours]
+    order = model_order(res)
 
     if fmt == "df":
         wide = summary.pivot(index="model", columns="metric", values="mean")
@@ -148,7 +162,7 @@ def comparison_table(res, per_user=None, fmt="markdown", digits=4):
     d = deltas(res, per_user, summary)
     if not d.empty:
         d = d.set_index("metric")
-        row = ["Δ vs best baseline"]
+        row = [f"Δ {labels.get(res['ours'], res['ours'])} vs best other"]
         for m in metrics:
             if m not in d.index:
                 row.append("–")
@@ -191,14 +205,11 @@ def _style(ax):
 
 def plot_comparison(res, per_user=None, metrics=None, out=None, title=None, max_cols=5):
     # dot plot, one panel per metric, models as rows; dots don't need a zero baseline,
-    # so small gaps between models stay visible. ours is the only coloured row.
+    # so small gaps between models stay visible. flexrecsys models are the coloured rows.
     summary = summarize(res, per_user)
     metrics = metrics or [m for m in metric_list(res) if m in set(summary.metric)]
-    labels = res.get("labels", {})
-    ours = res.get("ours")
-    order = list(res["runs"])
-    if ours in order:
-        order = [m for m in order if m != ours] + [ours]  # ours plotted on top row
+    labels = model_labels(res)
+    order = model_order(res)  # flexrecsys models on the top rows
     y = {m: i for i, m in enumerate(order)}
 
     ncols = min(len(metrics), max_cols)
@@ -215,19 +226,16 @@ def plot_comparison(res, per_user=None, metrics=None, out=None, title=None, max_
             if model not in s.index:
                 continue
             r = s.loc[model]
-            is_ours = model == ours
+            is_ours = is_flex(model)
             c = OURS_COLOR if is_ours else BASE_COLOR
             ax.plot([r.lo, r.hi], [y[model]] * 2, color=c, linewidth=2 if is_ours else 1.4,
                     solid_capstyle="round", alpha=0.9 if is_ours else 0.55, zorder=2)
             ax.scatter(r["mean"], y[model], s=64 if is_ours else 40, color=c, zorder=3,
                        edgecolor=SURFACE, linewidth=1.5)
-            if is_ours or model == best:
-                # ours sits on the top row so its label goes above; best baseline's goes below
-                ax.annotate(f"{r['mean']:.4f}", (r["mean"], y[model]), xytext=(0, 8 if is_ours else -9),
-                            textcoords="offset points", ha="center", fontsize=7.5,
-                            va="bottom" if is_ours else "top",
-                            color=INK if is_ours else INK_2,
-                            fontweight="bold" if model == best else "normal")
+            if model == best:
+                ax.annotate(f"{r['mean']:.4f}", (r["mean"], y[model]), xytext=(0, 8),
+                            textcoords="offset points", ha="center", fontsize=7.5, va="bottom",
+                            color=INK, fontweight="bold")
         lo, hi = s["lo"].min(), s["hi"].max()
         pad = (hi - lo) * 0.15 or abs(hi) * 0.02 or 0.01
         ax.set_xlim(lo - pad, hi + pad)
@@ -239,8 +247,8 @@ def plot_comparison(res, per_user=None, metrics=None, out=None, title=None, max_
         ax.set_yticklabels([labels.get(m, m) for m in order], fontsize=9)
         ax.tick_params(labelleft=True)
         for t, m in zip(ax.get_yticklabels(), order):
-            t.set_color(OURS_COLOR if m == ours else INK_2)
-            t.set_fontweight("bold" if m == ours else "normal")
+            t.set_color(OURS_COLOR if is_flex(m) else INK_2)
+            t.set_fontweight("bold" if is_flex(m) else "normal")
         ax.set_ylim(-0.7, len(order) - 0.4)
 
     kinds = sorted(set(summary.interval) - {"none"})
@@ -251,7 +259,7 @@ def plot_comparison(res, per_user=None, metrics=None, out=None, title=None, max_
             f"{d.get('users', 0):,} users. "
             f"Whiskers: {'; '.join(kinds) if kinds else 'none (single run)'}. Scored on {split}.")
     fig.text(0.01, 0.01, note, fontsize=7, color=MUTED, ha="left", va="bottom")
-    fig.suptitle(title or f"{split.capitalize()} metrics: baselines vs flexrecsys", fontsize=11,
+    fig.suptitle(title or f"{split.capitalize()} metrics: flexrecsys models (blue) and comparison methods", fontsize=11,
                  color=INK, x=0.01, ha="left", y=0.99)
     fig.tight_layout(rect=(0, 0.05 / nrows, 1, 1 - 0.07 / nrows), w_pad=1.6, h_pad=1.2)
     if out:
@@ -266,22 +274,21 @@ def plot_at_k(res, per_user=None, out=None):
     # lines usually bunch together at the right end, so identity comes from the legend + markers
     summary = summarize(res, per_user)
     ks = res.get("ks", [])
-    labels = res.get("labels", {})
-    ours = res.get("ours")
+    labels = model_labels(res)
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.6), facecolor=SURFACE)
     for ax, fam in zip(axes, ["recall", "ndcg"]):
         _style(ax)
         ax.grid(axis="y", color=GRID, linewidth=0.6)
         bi = 0
-        for model in res["runs"]:
+        for model in model_order(res):
             s = summary[(summary.model == model) & summary.metric.str.startswith(fam + "@")]
             if s.empty:
                 continue
             s = s.assign(k=s.metric.str.split("@").str[1].astype(int)).sort_values("k")
-            is_ours = model == ours
+            is_ours = is_flex(model)
             c = OURS_COLOR if is_ours else BASE_COLOR
-            mk = "o" if is_ours else BASE_MARKERS[bi % len(BASE_MARKERS)]
-            bi += not is_ours
+            mk = BASE_MARKERS[bi % len(BASE_MARKERS)]
+            bi += 1
             ax.fill_between(s.k, s.lo, s.hi, color=c, alpha=0.12 if is_ours else 0.06, linewidth=0)
             ax.plot(s.k, s["mean"], color=c, linewidth=2, marker=mk, markersize=6 if is_ours else 5,
                     alpha=1 if is_ours else 0.7, label=labels.get(model, model))

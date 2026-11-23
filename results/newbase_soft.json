@@ -1,0 +1,235 @@
+{
+  "tag": "newbase_soft",
+  "dataset": "movielens_dev",
+  "ours": "flexrecsys",
+  "labels": {
+    "mf": "MF",
+    "mf-refit": "flexrecsys (mf-refit only)",
+    "flexrecsys": "flexrecsys (ours)",
+    "flexrecsys-soft": "flexrecsys, soft update"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "val",
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "heldout_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "val",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "newbase_soft",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8137681366733592,
+        "recall@10": 0.05283578495753437,
+        "ndcg@10": 0.05436383751006005,
+        "recall@20": 0.06269857137077858,
+        "ndcg@20": 0.05721322921509954,
+        "n_users": 2538,
+        "seconds": 6.5,
+        "epochs_run": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8136028721419737,
+        "recall@10": 0.05285751810574506,
+        "ndcg@10": 0.05477000648370152,
+        "recall@20": 0.06243192535753047,
+        "ndcg@20": 0.05740819914221948,
+        "n_users": 2538,
+        "seconds": 5.6,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.813531255394236,
+        "recall@10": 0.053633344590791394,
+        "ndcg@10": 0.05484839670822666,
+        "recall@20": 0.0637326228090268,
+        "ndcg@20": 0.05766995624206965,
+        "n_users": 2538,
+        "seconds": 5.4,
+        "epochs_run": 8
+      }
+    ],
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7950219595206962,
+        "recall@10": 0.07411097351995698,
+        "ndcg@10": 0.07616081919067633,
+        "recall@20": 0.08453099366279401,
+        "ndcg@20": 0.07795124649291967,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.7947489931301646,
+        "recall@10": 0.07363425144158005,
+        "ndcg@10": 0.07530817100325293,
+        "recall@20": 0.08336750495941626,
+        "ndcg@20": 0.07698518458540729,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.7945680447145597,
+        "recall@10": 0.07368193928477616,
+        "ndcg@10": 0.07653802282779672,
+        "recall@20": 0.08294058612333832,
+        "ndcg@20": 0.07781076126648638,
+        "n_users": 2538,
+        "seconds": 0.3,
+        "user_reg": 0.1
+      }
+    ],
+    "flexrecsys": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8051073935028588,
+        "recall@10": 0.07235434100091312,
+        "ndcg@10": 0.07547661111824101,
+        "recall@20": 0.08240639279995858,
+        "ndcg@20": 0.07707475082634081,
+        "n_users": 2538,
+        "seconds": 4.8,
+        "mean_weight": 0.7662778704740801,
+        "detector_reg": 0.5623413251903491,
+        "users_flagged": 907,
+        "users": 2591
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8047374864724779,
+        "recall@10": 0.07232009956596244,
+        "ndcg@10": 0.07489502911791712,
+        "recall@20": 0.08178500098718354,
+        "ndcg@20": 0.07626404334438931,
+        "n_users": 2538,
+        "seconds": 4.0,
+        "mean_weight": 0.7608183124663427,
+        "detector_reg": 1.0,
+        "users_flagged": 929,
+        "users": 2591
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8054822215691653,
+        "recall@10": 0.07298913655296634,
+        "ndcg@10": 0.0762936278994521,
+        "recall@20": 0.08246033292811428,
+        "ndcg@20": 0.07766145821930713,
+        "n_users": 2538,
+        "seconds": 4.2,
+        "mean_weight": 0.7613430059269206,
+        "detector_reg": 1.0,
+        "users_flagged": 926,
+        "users": 2591
+      }
+    ],
+    "flexrecsys-soft": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7960827224688353,
+        "recall@10": 0.07447387018900022,
+        "ndcg@10": 0.076616812073995,
+        "recall@20": 0.0843955136273202,
+        "ndcg@20": 0.07803560781924919,
+        "n_users": 2538,
+        "seconds": 2.5,
+        "shift_mult": 30.0,
+        "mean_weight": 0.7662778704740801,
+        "users_flagged": 907,
+        "users": 2591
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.7929979493260573,
+        "recall@10": 0.07390802656760104,
+        "ndcg@10": 0.07558783132060928,
+        "recall@20": 0.08378548123807184,
+        "ndcg@20": 0.07730428544207507,
+        "n_users": 2538,
+        "seconds": 2.4,
+        "shift_mult": 100.0,
+        "mean_weight": 0.7608183124663427,
+        "users_flagged": 929,
+        "users": 2591
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.7951136715670104,
+        "recall@10": 0.07394774037800042,
+        "ndcg@10": 0.07670286158793714,
+        "recall@20": 0.08338626252008478,
+        "ndcg@20": 0.07798353682967732,
+        "n_users": 2538,
+        "seconds": 2.2,
+        "shift_mult": 100.0,
+        "mean_weight": 0.7613430059269206,
+        "users_flagged": 926,
+        "users": 2591
+      }
+    ]
+  }
+}

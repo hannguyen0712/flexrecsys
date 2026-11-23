@@ -4,7 +4,7 @@
   "ours": "flexrecsys",
   "labels": {
     "mf": "MF",
-    "mf-refit": "MF, users refit",
+    "mf-refit": "flexrecsys (mf-refit only)",
     "flexrecsys-v1": "flexrecsys v1 (window BOCPD)",
     "flexrecsys": "flexrecsys (ours)"
   },
