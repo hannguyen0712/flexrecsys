@@ -60,7 +60,7 @@ Users need at least 50 ratings spanning 180 days, movies at least 5 ratings. Eac
 
 ### The flexrecsys models
 
-Every flexrecsys model starts from the same trained matrix factorization (stage 1). They differ in two ways: which detector, if any, looks for a change in each user's history (stage 2), and what is done with what it finds. The table is a quick reference; each model is explained below it.
+Every flexrecsys model starts from the same trained matrix factorization (stage 1). In stage 2, the system decides which detector, if any, looks for a change in each user's history, and what is done with what it finds. 
 
 | Name in the tables | `--models` key | Detector | What it does with a detected change |
 |---|---|---|---|
@@ -136,7 +136,7 @@ python compare.py --data netflix_day_dev --eval test --models surprise-svd mf mf
 
 ### MovieLens, test split
 
-Three seeds (575, 576, 577). The configuration was frozen before this run, and the test split was scored once.
+Seeds: 575, 576, 577
 
 | Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
 |:---|---:|---:|---:|---:|---:|
@@ -159,8 +159,6 @@ Intervals are ±1 standard deviation over seeds, except the bias baseline (deter
 
 ### MovieLens, fresh users, test split
 
-2,600 MovieLens users from outside the dev sample, never used for any choice in this project: 845,696 train, 104,664 validation and 108,027 test ratings, 21,558 movies. The frozen configuration, three seeds, test scored once. TimeSVD++ was not run on these users.
-
 | Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
 |:---|---:|---:|---:|---:|---:|
 | Surprise SVD | **0.8252 ± 0.0003** | 0.0338 ± 0.0006 | 0.0361 ± 0.0007 | 0.0366 ± 0.0005 | 0.0360 ± 0.0007 |
@@ -180,7 +178,7 @@ Intervals are ±1 standard deviation over seeds, except the bias baseline (deter
 
 ### Netflix, test split
 
-A 1% sample of Netflix Prize users with day-aware splits (`data/netflix_day_dev`): 641,771 train, 72,023 validation and 68,394 test ratings from 2,393 users and 14,453 movies. The configuration frozen on MovieLens was run unchanged, on the 1 to 5 rating scale and with the fitted detector prior. Three seeds, test scored once.
+A 1% sample of Netflix Prize users with day-aware splits (`data/netflix_day_dev`): 641,771 train, 72,023 validation and 68,394 test ratings from 2,393 users and 14,453 movies. The configuration frozen on MovieLens was run unchanged, on the 1 to 5 rating scale and with the fitted detector prior. We ran three seeds, and test are scored once.
 
 | Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
 |:---|---:|---:|---:|---:|---:|
