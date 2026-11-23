@@ -1,0 +1,244 @@
+{
+  "tag": "syn_shift_100",
+  "dataset": "synthetic",
+  "ours": "flexrecsys",
+  "labels": {
+    "mf-refit": "flexrecsys (mf-refit only)",
+    "flexrecsys": "flexrecsys (ours)",
+    "flexrecsys-soft": "flexrecsys, soft update"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "val",
+  "data": {
+    "train_ratings": 188165,
+    "val_ratings": 22938,
+    "heldout_ratings": 22938,
+    "users": 1500,
+    "movies": 1200
+  },
+  "settings": {
+    "data": null,
+    "synthetic": true,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "val",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "syn_shift_100",
+    "device": "cpu",
+    "verbose": false,
+    "recipe": "wd",
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "no_diagnose": false,
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "shift_frac": [
+      1.0
+    ],
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7031461680836917,
+        "recall@10": 0.0640665205375012,
+        "ndcg@10": 0.06336563458879582,
+        "recall@20": 0.0893763163149152,
+        "ndcg@20": 0.07636826089515093,
+        "n_users": 1499,
+        "seconds": 1.6,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.7032101751969658,
+        "recall@10": 0.06527870432139946,
+        "ndcg@10": 0.06448405651992627,
+        "recall@20": 0.08648855632223802,
+        "ndcg@20": 0.07533087559375626,
+        "n_users": 1499,
+        "seconds": 1.7,
+        "user_reg": 0.3
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.6946748531232431,
+        "recall@10": 0.06537850630579116,
+        "ndcg@10": 0.06393834074788343,
+        "recall@20": 0.08753089077859255,
+        "ndcg@20": 0.07498622007353364,
+        "n_users": 1499,
+        "seconds": 1.8,
+        "user_reg": 1.0
+      }
+    ],
+    "flexrecsys": [
+      {
+        "seed": 575,
+        "val_rmse": 0.6680561160838329,
+        "recall@10": 0.08156363501593655,
+        "ndcg@10": 0.08186185938086876,
+        "recall@20": 0.10719594873458027,
+        "ndcg@20": 0.09432756524724129,
+        "n_users": 1499,
+        "seconds": 1.0,
+        "mean_weight": 0.7288448145040535,
+        "detector_reg": 1.0,
+        "users_flagged": 508,
+        "users": 1500
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.6683940082040907,
+        "recall@10": 0.07936163791734172,
+        "ndcg@10": 0.07929164919252797,
+        "recall@20": 0.10583602054453624,
+        "ndcg@20": 0.09259716615208019,
+        "n_users": 1499,
+        "seconds": 1.0,
+        "mean_weight": 0.7291626936816791,
+        "detector_reg": 1.0,
+        "users_flagged": 501,
+        "users": 1500
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.6588242177045088,
+        "recall@10": 0.08316179039994918,
+        "ndcg@10": 0.08313867002658665,
+        "recall@20": 0.10691491782045959,
+        "ndcg@20": 0.09464087277736025,
+        "n_users": 1499,
+        "seconds": 1.0,
+        "mean_weight": 0.7307659848126484,
+        "detector_reg": 1.0,
+        "users_flagged": 510,
+        "users": 1500
+      }
+    ],
+    "flexrecsys-soft": [
+      {
+        "seed": 575,
+        "val_rmse": 0.6679472006479895,
+        "recall@10": 0.08187945402755276,
+        "ndcg@10": 0.08219552909267064,
+        "recall@20": 0.10708979392146913,
+        "ndcg@20": 0.09452840350856177,
+        "n_users": 1499,
+        "seconds": 0.8,
+        "shift_mult": 0.3,
+        "mean_weight": 0.7288448145040535,
+        "users_flagged": 508,
+        "users": 1500
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.6683413805763364,
+        "recall@10": 0.07935449029511739,
+        "ndcg@10": 0.07949322184816361,
+        "recall@20": 0.10613434443880229,
+        "ndcg@20": 0.09302638220989928,
+        "n_users": 1499,
+        "seconds": 0.9,
+        "shift_mult": 0.3,
+        "mean_weight": 0.7291626936816791,
+        "users_flagged": 501,
+        "users": 1500
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.6590139619859398,
+        "recall@10": 0.08343525313171744,
+        "ndcg@10": 0.08242925469568564,
+        "recall@20": 0.10620247314204276,
+        "ndcg@20": 0.09351098401520873,
+        "n_users": 1499,
+        "seconds": 0.8,
+        "shift_mult": 0.3,
+        "mean_weight": 0.7307659848126484,
+        "users_flagged": 510,
+        "users": 1500
+      }
+    ]
+  },
+  "changepoint_detection": [
+    {
+      "seed": 575,
+      "auc": 0.7767844767844768,
+      "precision": 0.9448818897637795,
+      "recall": 0.43243243243243246,
+      "users_with_shift_in_train": 1110,
+      "users": 1500
+    },
+    {
+      "seed": 576,
+      "auc": 0.7772002772002771,
+      "precision": 0.9500998003992016,
+      "recall": 0.42882882882882883,
+      "users_with_shift_in_train": 1110,
+      "users": 1500
+    },
+    {
+      "seed": 577,
+      "auc": 0.7788311388311387,
+      "precision": 0.9450980392156862,
+      "recall": 0.43423423423423424,
+      "users_with_shift_in_train": 1110,
+      "users": 1500
+    }
+  ],
+  "diagnostics": {
+    "flagged_share": 0.33866666666666667,
+    "flagged_share_shuffled": 0.050666666666666665,
+    "before_after_flagged": [
+      0.8141464566973095,
+      0.7383337969780491,
+      0.8945126279200929
+    ],
+    "before_after_unflagged": [
+      0.2009793485553921,
+      0.160596147911478,
+      0.24167537971080996
+    ]
+  }
+}

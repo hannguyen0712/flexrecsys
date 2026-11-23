@@ -1,0 +1,159 @@
+{
+  "tag": "v1_window_20",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "mf": "MF",
+    "flexrecsys-v1": "flexrecsys (window BOCPD)"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "val",
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "heldout_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 0,
+    "eval": "val",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "v1_window_20",
+    "device": "cpu",
+    "verbose": false,
+    "recipe": "wd",
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 20,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "no_diagnose": true,
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "shift_frac": [
+      0.5
+    ],
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8137681372146213,
+        "recall@10": 0.05283578495753437,
+        "ndcg@10": 0.05436383751006005,
+        "recall@20": 0.06269857137077858,
+        "ndcg@20": 0.05721322921509954,
+        "n_users": 2538,
+        "seconds": 7.2,
+        "epochs_run": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8136028725448474,
+        "recall@10": 0.05285751810574506,
+        "ndcg@10": 0.05477000648370152,
+        "recall@20": 0.06243192535753047,
+        "ndcg@20": 0.05740819914221948,
+        "n_users": 2538,
+        "seconds": 5.7,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8135312554024209,
+        "recall@10": 0.053633344590791394,
+        "ndcg@10": 0.05484839670822666,
+        "recall@20": 0.0637326228090268,
+        "ndcg@20": 0.05766995624206965,
+        "n_users": 2538,
+        "seconds": 5.5,
+        "epochs_run": 8
+      }
+    ],
+    "flexrecsys-v1": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8120861193649226,
+        "recall@10": 0.04758636971993946,
+        "ndcg@10": 0.04949298001948212,
+        "recall@20": 0.057897480387306854,
+        "ndcg@20": 0.05253529232055553,
+        "n_users": 2538,
+        "seconds": 10.7,
+        "epochs_run": 8,
+        "mean_weight": 0.5667520058247473,
+        "users_flagged": 1806,
+        "users": 2591
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8125003520886169,
+        "recall@10": 0.04863909840269178,
+        "ndcg@10": 0.05045872344634451,
+        "recall@20": 0.05680076438636114,
+        "ndcg@20": 0.0521744209861912,
+        "n_users": 2538,
+        "seconds": 10.8,
+        "epochs_run": 8,
+        "mean_weight": 0.5682492088880968,
+        "users_flagged": 1793,
+        "users": 2591
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8123648212082301,
+        "recall@10": 0.04858234205160919,
+        "ndcg@10": 0.05048147764575502,
+        "recall@20": 0.058390556133577375,
+        "ndcg@20": 0.053307683089857914,
+        "n_users": 2538,
+        "seconds": 10.5,
+        "epochs_run": 8,
+        "mean_weight": 0.5766684096851501,
+        "users_flagged": 1760,
+        "users": 2591
+      }
+    ]
+  }
+}

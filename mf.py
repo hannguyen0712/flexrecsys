@@ -77,6 +77,67 @@ class BiasBaseline:
         return recs
 
 
+class SurpriseSVD:
+    # Surprise's SVD (biased MF trained by SGD, Surprise's default settings), wrapped so it predicts
+    # and ranks like the other models. scikit-surprise is optional: pip install scikit-surprise
+    def __init__(self, n_factors=100, n_epochs=20, lr=0.005, reg=0.02, rating_scale=(0.5, 5.0),
+                 seed=0):
+        self.params = dict(n_factors=n_factors, n_epochs=n_epochs, lr_all=lr, reg_all=reg,
+                           random_state=seed)
+        self.rating_scale = rating_scale
+
+    def fit(self, train):
+        try:
+            from surprise import SVD, Dataset, Reader
+        except ImportError as e:
+            raise SystemExit("surprise-svd needs scikit-surprise: pip install scikit-surprise "
+                             "(or conda install -c conda-forge scikit-surprise)") from e
+        data = Dataset.load_from_df(train[["userId", "movieId", "rating"]],
+                                    Reader(rating_scale=tuple(self.rating_scale)))
+        ts = data.build_full_trainset()
+        algo = SVD(**self.params).fit(ts)
+        # Surprise numbers users and items in order of appearance; reorder to sorted raw ids
+        raw_u = np.array([ts.to_raw_uid(i) for i in range(ts.n_users)])
+        raw_i = np.array([ts.to_raw_iid(i) for i in range(ts.n_items)])
+        ou, oi = np.argsort(raw_u), np.argsort(raw_i)
+        self.users, self.items = IdMap(raw_u), IdMap(raw_i)
+        self.mu = float(ts.global_mean)
+        self.P, self.b_u = algo.pu[ou], algo.bu[ou]
+        self.Q, self.b_i = algo.qi[oi], algo.bi[oi]
+        return self
+
+    def predict(self, df):
+        # unknown users or movies contribute nothing, as in Surprise
+        u, i = self.users.encode(df.userId), self.items.encode(df.movieId)
+        ku, ki = u >= 0, i >= 0
+        u, i = np.maximum(u, 0), np.maximum(i, 0)
+        pred = (self.mu + self.b_u[u] * ku + self.b_i[i] * ki
+                + (self.P[u] * self.Q[i]).sum(1) * (ku & ki))
+        return np.clip(pred, *self.rating_scale)
+
+    def recommend(self, history, users=None, k=20, batch_size=1024):
+        # same candidates as MF.recommend: every train movie not already in the user's history
+        users = np.unique(history.userId) if users is None else np.asarray(users)
+        uidx = self.users.encode(users)
+        users, uidx = users[uidx >= 0], uidx[uidx >= 0]
+        hu, hi = self.users.encode(history.userId), self.items.encode(history.movieId)
+        keep = (hu >= 0) & (hi >= 0)
+        seen = pd.Series(hi[keep]).groupby(hu[keep]).apply(np.asarray)
+        recs = {}
+        for s in range(0, len(uidx), batch_size):
+            b = uidx[s:s + batch_size]
+            scores = self.P[b] @ self.Q.T + self.b_i
+            for r, ui in enumerate(b):
+                if ui in seen.index:
+                    scores[r, seen[ui]] = -np.inf
+            kk = min(k, scores.shape[1])
+            top = np.argpartition(-scores, kk - 1, axis=1)[:, :kk]
+            top = np.take_along_axis(top, np.argsort(-np.take_along_axis(scores, top, 1), 1), 1)
+            for user, row in zip(users[s:s + batch_size], top):
+                recs[int(user)] = self.items.decode(row).tolist()
+        return recs
+
+
 class MFNet(nn.Module):
     # r_hat = mu + b_u + b_i + p_u . q_i
     def __init__(self, n_users, n_items, n_factors, mu, init_std=0.01):

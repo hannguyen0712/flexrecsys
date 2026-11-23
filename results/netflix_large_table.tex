@@ -1,0 +1,12 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Model & RMSE $\downarrow$ & Recall@10 $\uparrow$ & Recall@20 $\uparrow$ & NDCG@10 $\uparrow$ & NDCG@20 $\uparrow$ \\
+\midrule
+MF & 0.9359 & 0.0553 $\pm$ 0.0014 & 0.0517 $\pm$ 0.0012 & 0.0592 $\pm$ 0.0015 & 0.0532 $\pm$ 0.0012 \\
+flexrecsys (hard update) & \textbf{0.9072} & 0.0602 $\pm$ 0.0014 & 0.0630 $\pm$ 0.0013 & 0.0644 $\pm$ 0.0015 & 0.0618 $\pm$ 0.0013 \\
+flexrecsys (threshold detector) & 0.9143 & 0.0598 $\pm$ 0.0014 & 0.0629 $\pm$ 0.0013 & 0.0640 $\pm$ 0.0015 & 0.0616 $\pm$ 0.0013 \\
+flexrecsys (mf-refit only) & 0.9097 & \textbf{0.0604 $\pm$ 0.0014} & \textbf{0.0630 $\pm$ 0.0013} & \textbf{0.0647 $\pm$ 0.0016} & \textbf{0.0621 $\pm$ 0.0013} \\
+\midrule
+$\Delta$ flexrecsys (hard update) vs best other & -0.3\% & -0.4\% [-1.0, +0.3] & -0.1\% [-0.7, +0.4] & -0.5\% [-1.1, -0.0] & -0.4\% [-0.8, +0.0] \\
+\bottomrule
+\end{tabular}

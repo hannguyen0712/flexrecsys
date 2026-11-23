@@ -1,5 +1,6 @@
 import argparse
 import copy
+from functools import partial
 import json
 import time
 from pathlib import Path
@@ -9,16 +10,17 @@ import numpy as np
 import pandas as pd
 
 from changepoint import (before_after_gap, changepoint_weights, fit_regime_prior, genre_shift,
-                         mean_interval, regime_weights, shuffle_within_users, time_decay_weights)
+                         genre_table, mean_interval, regime_weights, shuffle_within_users,
+                         threshold_weights, time_decay_weights)
 from data import RATING_SCALE, SEED, load_dir, load_split, set_seed
 from metrics import per_user_scores, rmse
 import plots
 
 RESULTS_DIR = Path(__file__).parent / "results"
-ALL_MODELS = ["bias", "mf", "mf-refit", "mf-decay", "decay-refit", "timesvdpp", "flexrecsys-v1",
+ALL_MODELS = ["bias", "mf", "surprise-svd", "mf-refit", "mf-decay", "decay-refit", "timesvdpp",
+              "flexrecsys-v1", "flexrecsys-v1-genre", "flexrecsys-v1-both", "flexrecsys-threshold",
               "flexrecsys-soft", "flexrecsys-level", "flexrecsys"]
-DEFAULT_MODELS = [m for m in ALL_MODELS
-                  if m not in ("flexrecsys-v1", "flexrecsys-soft", "flexrecsys-level")]
+DEFAULT_MODELS = ["bias", "mf", "mf-refit", "mf-decay", "decay-refit", "timesvdpp", "flexrecsys"]
 # soft update strengths, as multiples of the user-refit ridge strength
 SHIFT_GRID = [0.3, 1, 3, 10, 30, 100, 300]
 OURS = "flexrecsys"
@@ -45,6 +47,13 @@ def outputs(m, ev, args):
 def run_bias(train, val, args, cache, ev):
     import mf
     m = mf.BiasBaseline(rating_scale=tuple(args.rating_scale)).fit(train)
+    return *outputs(m, ev, args), {}
+
+
+def run_surprise(train, val, args, cache, ev):
+    # Surprise's SVD with its default settings, as in the proposal; seeded from the run's seed
+    import mf
+    m = mf.SurpriseSVD(rating_scale=tuple(args.rating_scale), seed=cache["seed"]).fit(train)
     return *outputs(m, ev, args), {}
 
 
@@ -219,16 +228,38 @@ def run_flexrecsys(train, val, args, cache, ev):
     return *outputs(m, ev, args), extra
 
 
-def run_flexrecsys_v1(train, val, args, cache, ev):
+def movie_genres(args):
+    # the genre signal needs MovieLens genres; Netflix and the generated data have none
+    name = "synthetic" if args.synthetic else Path(args.data).name if args.data else args.dataset
+    if not name.startswith("movielens"):
+        raise SystemExit("the genre signal needs MovieLens genres; run it on MovieLens")
+    from data import load_movies
+    return genre_table(load_movies("movielens"))
+
+
+def run_flexrecsys_v1(train, val, args, cache, ev, signal="embedding"):
     base = base_mf(train, val, args, cache)
+    genres = None if signal == "embedding" else movie_genres(args)
     w, diag = changepoint_weights(base, train, window=args.window, hazard=1 / args.expected_run,
                                   floor=args.cp_floor, n_components=args.cp_components,
-                                  reg=args.cp_reg, return_diagnostics=True)
+                                  reg=args.cp_reg, return_diagnostics=True, signal=signal,
+                                  genres=genres)
     cache.setdefault("cp_diag", diag)
     # stage 2: refit with change-point weights
     m = make_mf(args, args.verbose).fit(train, val, weights=w)
     extra = {"epochs_run": len(m.history), "mean_weight": float(w.mean()),
              "users_flagged": int((diag.p_change > 0.5).sum()), "users": len(diag)}
+    return *outputs(m, ev, args), extra
+
+
+def run_flexrecsys_threshold(train, val, args, cache, ev):
+    # the simple fallback detector from the proposal, acted on like the hard update
+    base = base_mf(train, val, args, cache)
+    w, diag = threshold_weights(base, train, n_components=args.cp_components,
+                                min_seg=args.cp_min_seg, return_diagnostics=True)
+    m = refit(base, train, w, args)
+    extra = {"mean_weight": float(w.mean()), "users_flagged": int((diag.p_change > 0.5).sum()),
+             "users": len(diag), "threshold": float(diag.threshold.iloc[0])}
     return *outputs(m, ev, args), extra
 
 
@@ -259,9 +290,14 @@ def run_timesvdpp(train, val, args, cache, ev):
     return pred, recs, {"best_epoch": best_epoch}
 
 
-RUNNERS = {"bias": run_bias, "mf": run_mf, "mf-refit": run_mf_refit, "mf-decay": run_mf_decay,
+RUNNERS = {"bias": run_bias, "mf": run_mf, "surprise-svd": run_surprise,
+           "mf-refit": run_mf_refit, "mf-decay": run_mf_decay,
            "decay-refit": run_decay_refit, "timesvdpp": run_timesvdpp,
-           "flexrecsys-v1": run_flexrecsys_v1, "flexrecsys-soft": run_flexrecsys_soft,
+           "flexrecsys-v1": run_flexrecsys_v1,
+           "flexrecsys-v1-genre": partial(run_flexrecsys_v1, signal="genre"),
+           "flexrecsys-v1-both": partial(run_flexrecsys_v1, signal="both"),
+           "flexrecsys-threshold": run_flexrecsys_threshold,
+           "flexrecsys-soft": run_flexrecsys_soft,
            "flexrecsys-level": run_flexrecsys_level,
            "flexrecsys": run_flexrecsys}
 
@@ -373,7 +409,7 @@ def run(args):
     runs = {m: [] for m in args.models}
     per_user, detection, flags, diagnostics = [], [], [], None
     for seed in args.seeds:
-        cache = {}
+        cache = {"seed": seed}
         # deterministic models only need one seed
         for name in args.models:
             if name == "bias" and seed != args.seeds[0]:

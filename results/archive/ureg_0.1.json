@@ -1,0 +1,89 @@
+{
+  "tag": "ureg_0.1",
+  "dataset": "movielens_dev",
+  "ours": null,
+  "labels": {
+    "mf": "MF",
+    "mf-refit": "flexrecsys (mf-refit only)"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "data": {
+    "train_ratings": 851711,
+    "val_ratings": 105443,
+    "users": 2591,
+    "movies": 20634
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "ureg_0.1",
+    "device": "cpu",
+    "verbose": false,
+    "factors": 64,
+    "reg": 0.05,
+    "lr": 0.005,
+    "batch_size": 4096,
+    "epochs": 30,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": 0.1,
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.7821458878513312,
+        "recall@10": 0.011501682364566525,
+        "ndcg@10": 0.011036218773056187,
+        "recall@20": 0.015487917941139805,
+        "ndcg@20": 0.012648211161579664,
+        "n_users": 2538,
+        "seconds": 4.3,
+        "epochs_run": 9
+      }
+    ],
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8519964615449467,
+        "recall@10": 0.0019781855479255005,
+        "ndcg@10": 0.0017117399645770236,
+        "recall@20": 0.0028898985644076366,
+        "ndcg@20": 0.00231176470655102,
+        "n_users": 2538,
+        "seconds": 0.4
+      }
+    ]
+  }
+}

@@ -1,0 +1,443 @@
+{
+  "tag": "fresh_proposal",
+  "dataset": "movielens_fresh2600",
+  "ours": "flexrecsys",
+  "labels": {
+    "surprise-svd": "Surprise SVD",
+    "mf": "MF",
+    "mf-refit": "flexrecsys (mf-refit only)",
+    "flexrecsys-threshold": "flexrecsys (threshold detector)",
+    "flexrecsys-v1": "flexrecsys (window BOCPD)",
+    "flexrecsys-v1-genre": "flexrecsys (window BOCPD, genre signal)",
+    "flexrecsys-v1-both": "flexrecsys (window BOCPD, embedding and genre signals)",
+    "flexrecsys": "flexrecsys (hard update)"
+  },
+  "ks": [
+    10,
+    20
+  ],
+  "eval": "test",
+  "data": {
+    "train_ratings": 845696,
+    "val_ratings": 104664,
+    "heldout_ratings": 108027,
+    "users": 2600,
+    "movies": 21558
+  },
+  "settings": {
+    "data": null,
+    "synthetic": false,
+    "dataset": "movielens",
+    "split": "dev",
+    "fresh_users": 2600,
+    "eval": "test",
+    "rating_scale": [
+      0.5,
+      5.0
+    ],
+    "seeds": [
+      575,
+      576,
+      577
+    ],
+    "k": [
+      10,
+      20
+    ],
+    "tag": "fresh_proposal",
+    "device": "cpu",
+    "verbose": false,
+    "recipe": "wd",
+    "factors": 32,
+    "reg": 0.0,
+    "lr": 0.003,
+    "batch_size": 4096,
+    "epochs": 8,
+    "mf_wd": 0.0001,
+    "half_life": 180.0,
+    "decay_floor": 0.0,
+    "window": 10,
+    "expected_run": 20.0,
+    "cp_floor": 0.2,
+    "cp_components": 8,
+    "cp_reg": 5.0,
+    "user_reg": "auto",
+    "user_reg_metric": "ndcg",
+    "no_diagnose": false,
+    "regime_prior": "auto",
+    "cp_prior": 0.2,
+    "cp_min_seg": 10,
+    "regime_floor": 0.0,
+    "cp_noise": null,
+    "tsvd_factors": 32,
+    "tsvd_epochs": 8,
+    "tsvd_lr": 0.003,
+    "tsvd_wd": 0.0001,
+    "tsvd_ablate": [],
+    "tsvd_raw_rank": false,
+    "shift_frac": [
+      0.5
+    ],
+    "syn_users": 1500,
+    "syn_items": 1200
+  },
+  "runs": {
+    "surprise-svd": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8253894036619076,
+        "recall@10": 0.034575837058381666,
+        "ndcg@10": 0.03719335697059364,
+        "recall@20": 0.03616572227619624,
+        "ndcg@20": 0.03644315976410788,
+        "n_users": 2578,
+        "seconds": 4.2
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8248316615717917,
+        "recall@10": 0.03336196387010972,
+        "ndcg@10": 0.036176362448918885,
+        "recall@20": 0.036815600306510536,
+        "ndcg@20": 0.03623168355703648,
+        "n_users": 2578,
+        "seconds": 4.0
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8254224041897503,
+        "recall@10": 0.03358623640819142,
+        "ndcg@10": 0.03637302020848875,
+        "recall@20": 0.0354653122842878,
+        "ndcg@20": 0.03519872294223786,
+        "n_users": 2578,
+        "seconds": 4.1
+      }
+    ],
+    "mf": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8461412027606733,
+        "recall@10": 0.06255756892878693,
+        "ndcg@10": 0.06623789642817125,
+        "recall@20": 0.07030959078878242,
+        "ndcg@20": 0.06691351955021213,
+        "n_users": 2578,
+        "seconds": 6.4,
+        "epochs_run": 8
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8462218045972224,
+        "recall@10": 0.06350991909564446,
+        "ndcg@10": 0.06621491355518475,
+        "recall@20": 0.07006083112085136,
+        "ndcg@20": 0.06654992924073883,
+        "n_users": 2578,
+        "seconds": 5.8,
+        "epochs_run": 8
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8463954756419673,
+        "recall@10": 0.0628112416417304,
+        "ndcg@10": 0.06555777979279977,
+        "recall@20": 0.07043443848835444,
+        "ndcg@20": 0.0662610069340801,
+        "n_users": 2578,
+        "seconds": 5.4,
+        "epochs_run": 8
+      }
+    ],
+    "mf-refit": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8328343451796878,
+        "recall@10": 0.07667873459184553,
+        "ndcg@10": 0.08215483416690852,
+        "recall@20": 0.08583033340408198,
+        "ndcg@20": 0.08220392960944939,
+        "n_users": 2578,
+        "seconds": 0.3,
+        "user_reg": 0.03
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8323408165361744,
+        "recall@10": 0.07601900082505203,
+        "ndcg@10": 0.08134935207021242,
+        "recall@20": 0.08370215621266128,
+        "ndcg@20": 0.0810333868063824,
+        "n_users": 2578,
+        "seconds": 0.3,
+        "user_reg": 0.03
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8317160563498979,
+        "recall@10": 0.07848707623727019,
+        "ndcg@10": 0.08318245275732963,
+        "recall@20": 0.08567399530464895,
+        "ndcg@20": 0.0827128386812276,
+        "n_users": 2578,
+        "seconds": 0.3,
+        "user_reg": 0.03
+      }
+    ],
+    "flexrecsys-threshold": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8667088864937584,
+        "recall@10": 0.07251961037841564,
+        "ndcg@10": 0.07761836952111043,
+        "recall@20": 0.08016685789116298,
+        "ndcg@20": 0.07719042293632321,
+        "n_users": 2578,
+        "seconds": 5.8,
+        "mean_weight": 0.6803212974875132,
+        "users_flagged": 1239,
+        "users": 2600,
+        "threshold": 1.398802535779385
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8686393646967332,
+        "recall@10": 0.06980371150270297,
+        "ndcg@10": 0.0746908915970563,
+        "recall@20": 0.07834381039131223,
+        "ndcg@20": 0.07511557252638054,
+        "n_users": 2578,
+        "seconds": 5.8,
+        "mean_weight": 0.6750936506735281,
+        "users_flagged": 1269,
+        "users": 2600,
+        "threshold": 1.3549044967109
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8661253391166092,
+        "recall@10": 0.07182616646348221,
+        "ndcg@10": 0.07684750066396767,
+        "recall@20": 0.07921867480740549,
+        "ndcg@20": 0.07669416238147726,
+        "n_users": 2578,
+        "seconds": 5.6,
+        "mean_weight": 0.6789756602845467,
+        "users_flagged": 1246,
+        "users": 2600,
+        "threshold": 1.39032425253912
+      }
+    ],
+    "flexrecsys-v1": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8456748460358837,
+        "recall@10": 0.05986429741278461,
+        "ndcg@10": 0.06275408548586715,
+        "recall@20": 0.06503878345563287,
+        "ndcg@20": 0.06256065697946944,
+        "n_users": 2578,
+        "seconds": 18.0,
+        "epochs_run": 8,
+        "mean_weight": 0.4551255274757874,
+        "users_flagged": 2165,
+        "users": 2600
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8456411090360788,
+        "recall@10": 0.05746872190820988,
+        "ndcg@10": 0.06040780284098831,
+        "recall@20": 0.06437860344071689,
+        "ndcg@20": 0.060971976981804246,
+        "n_users": 2578,
+        "seconds": 18.2,
+        "epochs_run": 8,
+        "mean_weight": 0.4579376602784633,
+        "users_flagged": 2170,
+        "users": 2600
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8464487438892357,
+        "recall@10": 0.058267914096075464,
+        "ndcg@10": 0.060252529489700085,
+        "recall@20": 0.06424124828328534,
+        "ndcg@20": 0.06039390866300093,
+        "n_users": 2578,
+        "seconds": 19.0,
+        "epochs_run": 8,
+        "mean_weight": 0.46097226106759975,
+        "users_flagged": 2167,
+        "users": 2600
+      }
+    ],
+    "flexrecsys-v1-genre": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8471835843777931,
+        "recall@10": 0.06165647665841614,
+        "ndcg@10": 0.06536078538415449,
+        "recall@20": 0.06860571363750202,
+        "ndcg@20": 0.06526898300668736,
+        "n_users": 2578,
+        "seconds": 18.4,
+        "epochs_run": 8,
+        "mean_weight": 0.8165734817855327,
+        "users_flagged": 549,
+        "users": 2600
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8473450474846148,
+        "recall@10": 0.06236223478271578,
+        "ndcg@10": 0.06535504163152281,
+        "recall@20": 0.06768367504736447,
+        "ndcg@20": 0.06485131246320806,
+        "n_users": 2578,
+        "seconds": 18.2,
+        "epochs_run": 8,
+        "mean_weight": 0.8165734817855327,
+        "users_flagged": 549,
+        "users": 2600
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8474757295049463,
+        "recall@10": 0.06255156575172091,
+        "ndcg@10": 0.06494664819091407,
+        "recall@20": 0.06899525719895207,
+        "ndcg@20": 0.06516081546040992,
+        "n_users": 2578,
+        "seconds": 19.5,
+        "epochs_run": 8,
+        "mean_weight": 0.8165734817855327,
+        "users_flagged": 549,
+        "users": 2600
+      }
+    ],
+    "flexrecsys-v1-both": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8470775563595067,
+        "recall@10": 0.05963386777001982,
+        "ndcg@10": 0.06296332348420262,
+        "recall@20": 0.06678818986596513,
+        "ndcg@20": 0.06332461525104582,
+        "n_users": 2578,
+        "seconds": 19.3,
+        "epochs_run": 8,
+        "mean_weight": 0.6507158507316675,
+        "users_flagged": 1311,
+        "users": 2600
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8467389316303595,
+        "recall@10": 0.06076554361077247,
+        "ndcg@10": 0.0631295453984324,
+        "recall@20": 0.06499479847825698,
+        "ndcg@20": 0.06227045566879255,
+        "n_users": 2578,
+        "seconds": 19.0,
+        "epochs_run": 8,
+        "mean_weight": 0.6591652518587792,
+        "users_flagged": 1296,
+        "users": 2600
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.846941488705391,
+        "recall@10": 0.060631472656298105,
+        "ndcg@10": 0.06299052467164448,
+        "recall@20": 0.06607359775310728,
+        "ndcg@20": 0.06240601692293589,
+        "n_users": 2578,
+        "seconds": 20.4,
+        "epochs_run": 8,
+        "mean_weight": 0.6586732898537897,
+        "users_flagged": 1312,
+        "users": 2600
+      }
+    ],
+    "flexrecsys": [
+      {
+        "seed": 575,
+        "val_rmse": 0.8538471442341607,
+        "recall@10": 0.07501123671604665,
+        "ndcg@10": 0.07962086993287584,
+        "recall@20": 0.08407276591738712,
+        "ndcg@20": 0.07976304866413217,
+        "n_users": 2578,
+        "seconds": 4.2,
+        "mean_weight": 0.7643024743127267,
+        "detector_reg": 1.0,
+        "users_flagged": 909,
+        "users": 2600
+      },
+      {
+        "seed": 576,
+        "val_rmse": 0.8547168476285042,
+        "recall@10": 0.07333219426896696,
+        "ndcg@10": 0.0779055722199499,
+        "recall@20": 0.08201872536550102,
+        "ndcg@20": 0.07830778172504907,
+        "n_users": 2578,
+        "seconds": 4.2,
+        "mean_weight": 0.7576070221514929,
+        "detector_reg": 1.0,
+        "users_flagged": 933,
+        "users": 2600
+      },
+      {
+        "seed": 577,
+        "val_rmse": 0.8527512664676586,
+        "recall@10": 0.07543115125543365,
+        "ndcg@10": 0.08027242693528566,
+        "recall@20": 0.08328578738555273,
+        "ndcg@20": 0.08019753799505541,
+        "n_users": 2578,
+        "seconds": 4.4,
+        "mean_weight": 0.7603749558680644,
+        "detector_reg": 1.0,
+        "users_flagged": 932,
+        "users": 2600
+      }
+    ]
+  },
+  "diagnostics": {
+    "flagged_share": 0.3496153846153846,
+    "flagged_share_shuffled": 0.05153846153846154,
+    "before_after_flagged": [
+      0.2896928852150973,
+      0.19321674921763066,
+      0.3898396687684398
+    ],
+    "before_after_unflagged": [
+      0.13566422641673737,
+      0.0875888951106734,
+      0.18557525970076863
+    ],
+    "genre_excess_flagged": [
+      0.04481549923612543,
+      0.040303198581891325,
+      0.04939668650256255
+    ],
+    "genre_excess_unflagged": [
+      0.03708380616403195,
+      0.033721239658804865,
+      0.04038897784151048
+    ],
+    "genre_beyond_chance": {
+      "flagged": 0.44774477447744776,
+      "unflagged": 0.30573625073920757
+    },
+    "genres_moving_most": {
+      "Drama": 0.08,
+      "Comedy": 0.0788,
+      "Action": 0.0423,
+      "Thriller": 0.0414,
+      "Adventure": 0.0351
+    }
+  }
+}

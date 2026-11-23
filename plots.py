@@ -17,7 +17,11 @@ LABELS = {"bias": "Bias baseline", "mf": "MF", "mf-refit": "flexrecsys (mf-refit
           "mf-decay": "MF + time decay", "decay-refit": "Time decay, users refit",
           "timesvdpp": "TimeSVD++", "flexrecsys-v1": "flexrecsys (window BOCPD)",
           "flexrecsys-soft": "flexrecsys (soft update)",
-          "flexrecsys-level": "flexrecsys (level update)", "flexrecsys": "flexrecsys (hard update)"}
+          "flexrecsys-level": "flexrecsys (level update)", "flexrecsys": "flexrecsys (hard update)",
+          "surprise-svd": "Surprise SVD",
+          "flexrecsys-v1-genre": "flexrecsys (window BOCPD, genre signal)",
+          "flexrecsys-v1-both": "flexrecsys (window BOCPD, embedding and genre signals)",
+          "flexrecsys-threshold": "flexrecsys (threshold detector)"}
 
 
 def is_flex(model):

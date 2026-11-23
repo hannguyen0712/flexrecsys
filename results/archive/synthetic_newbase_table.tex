@@ -1,0 +1,13 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Model & RMSE $\downarrow$ & Recall@10 $\uparrow$ & Recall@20 $\uparrow$ & NDCG@10 $\uparrow$ & NDCG@20 $\uparrow$ \\
+\midrule
+Bias baseline & 0.7058 & 0.0233 $\pm$ 0.0033 & 0.0372 $\pm$ 0.0038 & 0.0226 $\pm$ 0.0032 & 0.0298 $\pm$ 0.0033 \\
+MF & 0.6511 $\pm$ 0.0002 & 0.0940 $\pm$ 0.0011 & 0.1256 $\pm$ 0.0009 & 0.0957 $\pm$ 0.0012 & 0.1109 $\pm$ 0.0011 \\
+MF, users refit & 0.6409 $\pm$ 0.0012 & 0.1063 $\pm$ 0.0011 & 0.1437 $\pm$ 0.0009 & 0.1088 $\pm$ 0.0008 & 0.1263 $\pm$ 0.0003 \\
+Time decay, users refit & 0.6284 $\pm$ 0.0006 & 0.1122 $\pm$ 0.0018 & 0.1491 $\pm$ 0.0035 & 0.1140 $\pm$ 0.0023 & 0.1312 $\pm$ 0.0031 \\
+flexrecsys (ours) & \textbf{0.6259 $\pm$ 0.0014} & \textbf{0.1128 $\pm$ 0.0005} & \textbf{0.1517 $\pm$ 0.0006} & \textbf{0.1156 $\pm$ 0.0003} & \textbf{0.1339 $\pm$ 0.0005} \\
+\midrule
+$\Delta$ vs best baseline & -0.4\% & +0.6\% [-1.7, +3.0] & +1.8\% [-0.2, +3.8] & +1.4\% [-0.8, +3.7] & +2.1\% [+0.3, +3.8] \\
+\bottomrule
+\end{tabular}

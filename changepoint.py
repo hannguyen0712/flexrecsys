@@ -54,6 +54,25 @@ def assign_windows(train, window=10):
     return pd.Series(win, index=order).reindex(train.index).to_numpy()
 
 
+def genre_table(movies):
+    # one row per movie, one column per genre; a movie's genres share a total weight of 1
+    names = sorted({g for gs in movies.genres for g in gs})
+    col = {g: j for j, g in enumerate(names)}
+    G = np.zeros((len(movies), len(names)))
+    for r, gs in enumerate(movies.genres):
+        G[r, [col[g] for g in gs]] = 1.0 / len(gs)
+    return pd.DataFrame(G, index=movies.movieId.to_numpy(), columns=names)
+
+
+def window_genre_mix(train, win, genres, n_genres=8):
+    # per (user, window): share of each of the n most common genres among the window's movies
+    G = genres.reindex(train.movieId).fillna(0.0)
+    top = G.sum().nlargest(n_genres).index
+    mix = G[top].set_axis([f"g_{g}" for g in top], axis=1)
+    mix.index = pd.MultiIndex.from_arrays([train.userId.to_numpy(), win], names=["userId", "window"])
+    return mix.groupby(level=[0, 1]).mean().reset_index()
+
+
 def window_signals(model, train, window=10, n_components=8, reg=5.0):
     # per (user, window): ridge user vector with items frozen, projected onto the top principal
     # directions of the item factors so the signal is low-dimensional and comparable across windows
@@ -75,7 +94,7 @@ def window_signals(model, train, window=10, n_components=8, reg=5.0):
     return sig.sort_values(["userId", "window"]).reset_index(drop=True), win
 
 
-def robust_standardize(X):
+def robust_standardize(X, floor=1e-3):
     # centre per dim, scale by within-regime noise estimated from first differences, so one
     # big jump between regimes doesn't inflate the scale the way a plain std would
     X = X - np.median(X, 0)
@@ -83,24 +102,36 @@ def robust_standardize(X):
         return X
     d = np.abs(np.diff(X, axis=0))
     sigma = np.median(d, 0) / (0.6745 * np.sqrt(2))
-    return X / np.maximum(sigma, 1e-3)
+    return X / np.maximum(sigma, floor)
 
 
 def changepoint_weights(model, train, window=10, hazard=1 / 20, floor=0.2, n_components=8,
-                        reg=5.0, return_diagnostics=False):
-    # model: a fitted MF (needs user_vectors_from and item_embeddings)
+                        reg=5.0, return_diagnostics=False, signal="embedding", genres=None):
+    # model: a fitted MF (needs user_vectors_from and item_embeddings).
+    # signal: "embedding" (window user vectors), "genre" (window genre mix, needs genres from
+    # genre_table) or "both"
     sig, win = window_signals(model, train, window, n_components, reg)
-    feat = [c for c in sig.columns if c not in ("userId", "window")]
+    emb = [c for c in sig.columns if c not in ("userId", "window")]
+    if signal != "embedding":
+        sig = sig.merge(window_genre_mix(train, win, genres), on=["userId", "window"], how="left")
+        sig = sig.fillna(0.0)
+    gen = [c for c in sig.columns if c.startswith("g_")]
     w_by = {}
     diag = []
     for user, g in sig.groupby("userId", sort=False):
-        X = g[feat].to_numpy()
-        T = len(X)
+        T = len(g)
         if T < 3:
             w_by[user] = np.ones(T)
             diag.append((user, T, T, 0.0))
             continue
-        p = bocpd(robust_standardize(X), hazard=hazard)
+        parts = []
+        if signal in ("embedding", "both"):
+            parts.append(robust_standardize(g[emb].to_numpy()))
+        if signal in ("genre", "both"):
+            # one movie changes a genre's share in a 10-rating window by 0.1, so that is the
+            # smallest scale it gets; without a floor, shares that rarely move would dominate
+            parts.append(robust_standardize(g[gen].to_numpy(), floor=0.1))
+        p = bocpd(np.hstack(parts), hazard=hazard)
         # window j (0-based) is in the current regime iff the final run length >= T - j
         p_in = np.array([p[T - j - 1:].sum() for j in range(T)])
         w_by[user] = floor + (1 - floor) * p_in
@@ -210,13 +241,73 @@ def regime_weights(model, train, prior=0.2, n_components=8, reg=None, min_seg=10
     return weights
 
 
+def _max_split_stat(X, y, lam, min_seg):
+    # Chow-type F statistic for one ridge fit against separate fits before and after each
+    # candidate cut; returns the largest statistic and its cut
+    n, d = X.shape
+    cS = np.cumsum(X[:, :, None] * X[:, None, :], 0)
+    cb = np.cumsum(X * y[:, None], 0)
+    cy = np.cumsum(y * y)
+    cuts = np.arange(min_seg, n - min_seg + 1)
+    k = cuts - 1
+
+    def sse(S, b, yy):
+        sol = np.linalg.solve(S + lam * np.eye(d), b[..., None])[..., 0]
+        return yy - (b * sol).sum(-1)
+
+    split = sse(cS[k], cb[k], cy[k]) + sse(cS[-1] - cS[k], cb[-1] - cb[k], cy[-1] - cy[k])
+    F = ((sse(cS[-1], cb[-1], cy[-1]) - split) / d) / (np.maximum(split, 1e-9) / max(n - 2 * d, 1))
+    j = int(np.argmax(F))
+    return float(F[j]), int(cuts[j])
+
+
+def threshold_weights(model, train, n_components=8, min_seg=10, false_alarm=0.05, reg=None,
+                      seed=0, return_diagnostics=False):
+    # the simple fallback detector: the largest Chow F statistic over candidate cuts, in the same
+    # rating space as regime_weights. a user is flagged when it beats the (1 - false_alarm)
+    # quantile of the same statistic on shuffled histories, where every flag is a false alarm.
+    # flagged users keep only the ratings from their cut on; everyone else keeps all of them
+    if reg is None:
+        reg, _ = fit_regime_prior(model, train, n_components)
+    Z, b_i = regime_features(model, n_components)
+
+    def scan(tr):
+        df = tr.sort_values(["userId", "timestamp", "movieId"])
+        idx = model.items.encode(df.movieId)
+        y = df.rating.to_numpy(float) - float(model.net.mu) - b_i[idx]
+        X, users = Z[idx], df.userId.to_numpy()
+        bounds = np.r_[0, np.flatnonzero(np.diff(users)) + 1, len(users)]
+        rows = []
+        for lo, hi in zip(bounds[:-1], bounds[1:]):
+            if hi - lo < 2 * min_seg:
+                rows.append((users[lo], hi - lo, -1, -np.inf))
+                continue
+            stat, cut = _max_split_stat(X[lo:hi], y[lo:hi], reg, min_seg)
+            rows.append((users[lo], hi - lo, cut, stat))
+        return df, pd.DataFrame(rows, columns=["userId", "n_ratings", "map_cut", "stat"])
+
+    df, diag = scan(train)
+    null = scan(shuffle_within_users(train, seed))[1]
+    threshold = float(np.quantile(null.stat[null.map_cut >= 0], 1 - false_alarm))
+    diag["p_change"] = (diag.stat > threshold).astype(float)
+    diag["threshold"] = threshold
+    d = diag.set_index("userId")
+    cut = df.userId.map(d.map_cut.where(d.p_change > 0)).to_numpy(float)
+    pos = df.groupby("userId").cumcount().to_numpy()
+    w = np.where(pos < cut, 0.0, 1.0)  # unflagged users have no cut, so every comparison is False
+    weights = pd.Series(w, index=df.index).reindex(train.index).to_numpy()
+    if return_diagnostics:
+        return weights, diag
+    return weights
+
+
 def time_decay_weights(train, half_life_days=180.0, floor=0.0):
     # continuous exponential decay from each user's latest train rating (the smooth-drift view)
     last = train.groupby("userId")["timestamp"].transform("max").to_numpy()
     age = (last - train.timestamp.to_numpy()) / 86_400
     return np.maximum(0.5 ** (age / half_life_days), floor)
 
-# shift diagnostics: whether the detector's flags are real, and what changes at a detected change?
+# shift diagnostics: are the detector's flags real, and what changes at a detected change?
 
 def mean_interval(x, n_boot=4000, seed=0):
     # mean and 95% bootstrap interval
@@ -244,6 +335,8 @@ def _window(train, diag, max_k, after):
 
 
 def before_after_gap(model, train, val, diag, reg, max_k=50):
+    # per user: validation squared error of a profile fit on the k ratings before the change minus
+    # one fit on the k after it. positive means the post-change ratings predict the user better
     items = model.item_embeddings()
     Q = items.filter(regex=r"^q\d+$").to_numpy()
     b_i = items["b_i"].to_numpy()
@@ -262,14 +355,11 @@ def before_after_gap(model, train, val, diag, reg, max_k=50):
 
 
 def genre_shift(train, movies, diag, max_k=50, n_perm=50, seed=0):
-    # Jensen-Shannon divergence between the genre mix before and after the change, minus its average over random splits of the same ratings
+    # per user: Jensen-Shannon divergence between the genre mix before and after the change,
+    # minus its average over random splits of the same ratings. above zero: the mix really moved
     rng = np.random.default_rng(seed)
-    names = sorted({g for gs in movies.genres for g in gs})
-    col = {g: j for j, g in enumerate(names)}
-    G = np.zeros((len(movies), len(names)))
-    for r, gs in enumerate(movies.genres):
-        G[r, [col[g] for g in gs]] = 1.0 / len(gs)
-    table = pd.DataFrame(G, index=movies.movieId.to_numpy(), columns=names)
+    table = genre_table(movies)
+    names = list(table.columns)
 
     def js(a, b):
         p, q = a.mean(0), b.mean(0)

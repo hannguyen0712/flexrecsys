@@ -1,0 +1,11 @@
+\begin{tabular}{lrrrrr}
+\toprule
+Model & RMSE $\downarrow$ & Recall@10 $\uparrow$ & Recall@20 $\uparrow$ & NDCG@10 $\uparrow$ & NDCG@20 $\uparrow$ \\
+\midrule
+MF & 0.6511 $\pm$ 0.0002 & 0.0940 $\pm$ 0.0011 & 0.1256 $\pm$ 0.0009 & 0.0957 $\pm$ 0.0012 & 0.1109 $\pm$ 0.0011 \\
+MF, users refit & 0.6409 $\pm$ 0.0012 & 0.1063 $\pm$ 0.0011 & 0.1437 $\pm$ 0.0009 & 0.1088 $\pm$ 0.0008 & 0.1263 $\pm$ 0.0003 \\
+flexrecsys (ours) & \textbf{0.6259 $\pm$ 0.0014} & \textbf{0.1128 $\pm$ 0.0005} & \textbf{0.1517 $\pm$ 0.0006} & \textbf{0.1156 $\pm$ 0.0003} & \textbf{0.1339 $\pm$ 0.0005} \\
+\midrule
+$\Delta$ vs best baseline & -2.3\% & +6.1\% [+4.2, +8.3] & +5.5\% [+3.9, +7.2] & +6.3\% [+4.3, +8.7] & +6.0\% [+4.5, +7.8] \\
+\bottomrule
+\end{tabular}
