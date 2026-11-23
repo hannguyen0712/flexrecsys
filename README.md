@@ -2,7 +2,7 @@
 
 Detecting preference shifts in matrix factorization recommenders.
 
-Most time-aware recommenders assume user tastes drift smoothly and down-weight old ratings with a continuous decay. flexrecsys instead treats preference changes as discrete events: it locates a change point in each user's rating history with a Bayesian test and re-estimates the user from the ratings that follow it.
+Most time-aware recommenders assume user tastes drift smoothly and down-weight old ratings with a continuous decay. flexrecsys instead treats preference changes as discrete events where we locate a change point in each user's rating history with a Bayesian test and re-estimate the user from the ratings that follow it.
 
 The system has three stages:
 
@@ -10,13 +10,11 @@ The system has three stages:
 2. **Detect change points**: for each user, the probability that their taste changed, and where.
 3. **Re-solve each user exactly** with the movie vectors frozen, using the change points to decide how much each rating counts.
 
-Every model built on these stages is named "flexrecsys (method)". Without stage 2, every rating counts fully: that is flexrecsys (mf-refit only). The other models differ in how stage 2 is done or how its output is used; see [The flexrecsys models](#the-flexrecsys-models).
-
 ## Summary of results
 
 1. **flexrecsys out-ranks TimeSVD++ on two datasets, without its change-point stage.** flexrecsys (mf-refit only) beats TimeSVD++ on held-out test Recall@10 by 20% on MovieLens (0.0742 against 0.0616, paired difference +0.0126, 95% interval +0.0084 to +0.0166) and by 26% on Netflix (0.0622 against 0.0495, paired difference +0.0128, interval +0.0087 to +0.0168). It trains in about 6 seconds against 140. TimeSVD++ keeps the better RMSE on both.
-2. **The original gap to TimeSVD++ was a regularization artifact.** Switching off every time-aware component of TimeSVD++ leaves its ranking unchanged. Training plain MF with the same regularization closes the gap.
-3. **The change-point stage does not help on MovieLens or Netflix.** Three detectors were tried: online BOCPD on embedding windows (the proposal's method), online BOCPD on prediction errors, and an offline rating-space test. No variant gives a confirmed improvement over flexrecsys (mf-refit only). The only candidate is a 0.15% validation RMSE gain for one setting of flexrecsys (residual BOCPD, binary weights) on MovieLens, chosen from a sweep and not checked on held-out data or on ranking; on Netflix every setting that down-weights pre-change ratings is worse. Discarding pre-change ratings makes flagged users worse on both datasets, and again on 2,600 MovieLens users never used during development.
+2. **The original gap to TimeSVD++ was a regularization artifact.** Switching off every time-aware component of TimeSVD++ leaves its ranking unchanged. Training plain MF with the same regularization closes the gap. Surprise SVD, an independent implementation with the same kind of per-rating penalty as the original recipe, shows the same pattern: the best RMSE of any MF model and ranking below the bias baseline.
+3. **The change-point stage does not help on MovieLens or Netflix.** Four detectors were tried: online BOCPD on windows of ratings (the proposal's method, with embedding, genre and combined signals), online BOCPD on prediction errors, an offline Bayesian rating-space test, and a classical threshold test. No variant gives a confirmed improvement over flexrecsys (mf-refit only). The Bayesian test is the best detector to act on, ahead of the threshold test, and the genre signal is the best signal for window BOCPD, but neither beats the models without change points. The only candidate is a 0.15% validation RMSE gain for one setting of flexrecsys (residual BOCPD, binary weights) on MovieLens, chosen from a sweep and not checked on held-out data or on ranking; on Netflix every setting that down-weights pre-change ratings is worse. Discarding pre-change ratings makes flagged users worse on both datasets, and again on 2,600 MovieLens users never used during development.
 4. **The detector finds real changes, but they are gradual and do not last.** It flags 35% of MovieLens users against 5% when each user's rating order is shuffled, and every flag check gives the same result on the fresh users. On MovieLens, flagged users' post-change ratings predict their future better than their pre-change ratings, and their genre mix moves more than unflagged users'. The moves are shifts in the balance of common genres, and a user's full history still predicts their future better than the post-change history does.
 5. **flexrecsys (soft update) avoids the loss but does not gain.** It chose strong pulls toward each user's full-history profile (x30 to x300) and matched flexrecsys (mf-refit only) on held-out data: on the Netflix test split (0.0621 against 0.0622 Recall@10) and on the fresh MovieLens users (0.0766 against 0.0771, paired difference −0.0005, interval −0.0012 to +0.0002).
 
@@ -53,10 +51,11 @@ Users need at least 50 ratings spanning 180 days, movies at least 5 ratings. Eac
 
 **Stage 3, user refit.** With the movie factors frozen, each user's vector and bias are re-solved in closed form by weighted ridge regression on their training ratings. The ridge strength is chosen per seed on validation NDCG@10 from a fixed grid, using the refit with all weights 1, and is then shared by every variant that refits.
 
-**Stage 2, change-point detection.** Three detectors are implemented:
+**Stage 2, change-point detection.** Four detectors are implemented:
 
-- **Window BOCPD**, the method in the proposal: each user's history is cut into windows of 10 ratings, a user vector is fitted per window, and Bayesian online change-point detection (Adams and MacKay) runs over the window vectors.
+- **Window BOCPD**, the method in the proposal: each user's history is cut into windows of 10 ratings, and Bayesian online change-point detection (Adams and MacKay) runs over a signal computed per window. The signal is the window's user vector (embedding signal), the window's mix of the 8 most common genres (genre signal, MovieLens only), or both.
 - **Residual BOCPD** (`bocpd.py`): online change-point detection on each user's prediction errors from the trained MF. See [BOCPD_README.md](BOCPD_README.md).
+- **Threshold detector**, the simple fallback in the proposal: the classical (frequentist) version of the rating-space test below. For each user it takes the largest F statistic, over candidate cuts, for "two profiles fit better than one". The threshold is set without any labels: it is the 95th percentile of the same statistic on shuffled histories, where every flag is a false alarm.
 - **Rating-space test**, the final detector: for each user, with movies frozen, it compares the evidence for one user vector over the whole history against two vectors split at each candidate point (at least 10 ratings per side, prior probability of a change 0.2). The output is the probability of a change and, for every rating, the probability that it belongs to the user's current regime. A user is called flagged when the change probability exceeds 0.5. By default the detector's prior strength and noise level are fitted to the training ratings (`--regime-prior auto`); `--regime-prior fixed` uses `--cp-reg` and `--cp-noise`.
 
 ### The flexrecsys models
@@ -69,7 +68,10 @@ Every flexrecsys model starts from the same trained matrix factorization (stage 
 | flexrecsys (hard update) | `flexrecsys` | rating-space test | Rebuilds flagged users from their post-change ratings only |
 | flexrecsys (soft update) | `flexrecsys-soft` | rating-space test | Lets flagged users move part of the way toward their post-change ratings |
 | flexrecsys (level update) | `flexrecsys-level` | rating-space test | Updates only how generously flagged users rate, not their taste |
-| flexrecsys (window BOCPD) | `flexrecsys-v1` | window BOCPD | Down-weights earlier ratings and retrains the whole model |
+| flexrecsys (threshold detector) | `flexrecsys-threshold` | threshold detector | Rebuilds flagged users from their post-change ratings only, like the hard update |
+| flexrecsys (window BOCPD) | `flexrecsys-v1` | window BOCPD, embedding signal | Down-weights earlier ratings and retrains the whole model |
+| flexrecsys (window BOCPD, genre signal) | `flexrecsys-v1-genre` | window BOCPD, genre signal | The same, detecting changes in the genre mix instead |
+| flexrecsys (window BOCPD, embedding and genre signals) | `flexrecsys-v1-both` | window BOCPD, both signals | The same, with both signals together |
 | flexrecsys (residual BOCPD, binary weights) | `train_bocpd_mf.py` | residual BOCPD | Down-weights ratings before the last change and retrains the whole model |
 | flexrecsys (residual BOCPD, blending) | `train_bocpd_blending.py` | residual BOCPD | Mixes a long-term and a short-term profile for each user |
 
@@ -81,13 +83,15 @@ Every flexrecsys model starts from the same trained matrix factorization (stage 
 
 **flexrecsys (level update)** uses the same detector, but keeps each user's taste vector from their full history and re-estimates only their rating bias from post-change ratings. It tests the idea that part of a detected change is a user becoming a more generous or harsher rater. Raising or lowering all of one user's scores by the same amount cannot reorder their recommendations, so its ranking is identical to flexrecsys (mf-refit only) by construction; it can only change rating accuracy.
 
-**flexrecsys (window BOCPD)** is the method in the proposal. Each user's history is cut into windows of 10 ratings, a profile is fitted to each window, and Bayesian online change-point detection runs over the sequence of window profiles. Its run-length posterior gives each rating a weight, so ratings from earlier regimes count for as little as 0.2, and the whole matrix factorization, movie vectors included, is retrained with those weights. It has no stage 3 refit, so the model to compare it with is plain MF.
+**flexrecsys (threshold detector)** acts like the hard update, but with a simpler detector: no prior and no probabilities, just a test statistic and a cut-off. A user is either flagged, in which case only their ratings from the detected change on are used, or not, in which case all are. Its cut-off is calibrated on shuffled histories so that about 5% of users would be flagged by chance. Comparing it with the hard update shows whether the Bayesian machinery adds anything over a classical test.
+
+**flexrecsys (window BOCPD)** is the method in the proposal. Each user's history is cut into windows of 10 ratings, a profile is fitted to each window, and Bayesian online change-point detection runs over the sequence of window profiles. Its run-length posterior gives each rating a weight, so ratings from earlier regimes count for as little as 0.2, and the whole matrix factorization, movie vectors included, is retrained with those weights. It has no stage 3 refit, so the model to compare it with is plain MF. The two other window-BOCPD models run the same procedure on a different signal: the share of each of the 8 most common genres among the window's movies (genre signal), or the user vector and the genre mix together. Comparing the three is the ablation of drift signals the proposal describes; the genre signal needs MovieLens, since Netflix has no genre data.
 
 **flexrecsys (residual BOCPD, binary weights)** runs Bayesian online change-point detection on each user's sequence of prediction errors from the trained matrix factorization: if a user's errors shift, the model has stopped fitting them. A change is recorded where the most likely run length drops sharply. Ratings before the user's last change get a fixed lower weight (0.5 by default), and the whole model is retrained. These runs use the original 64-factor recipe and report RMSE only.
 
 **flexrecsys (residual BOCPD, blending)** uses the same detector but retrains nothing. For each user it fits a short-term profile to their ratings after the last detected change (or their most recent 20% of ratings if no change is found) and mixes it with their long-term profile. The mixing weight is the expected run length divided by the number of ratings, so users who look stable lean on their long-term profile.
 
-**Comparison methods.** Plain MF is stage 1 alone. The bias baseline predicts from the overall average plus user and movie biases. TimeSVD++ is a time-aware matrix factorization (see [TIMESVDPP_README.md](TIMESVDPP_README.md)). "Time decay, users refit" (`decay-refit`) is the continuous-decay approach the proposal compares against: the same exact refit as flexrecsys (mf-refit only), but with every rating's weight halving for each 180 days between it and the user's latest rating, so old ratings fade smoothly instead of being cut off at a change point.
+**Comparison methods.** Plain MF is stage 1 alone. Surprise SVD (`surprise-svd`) is the same kind of model trained by the Surprise library with its default settings (100 factors, 20 epochs), as the proposal planned; it needs the optional package `scikit-surprise`. The bias baseline predicts from the overall average plus user and movie biases. TimeSVD++ is a time-aware matrix factorization (see [TIMESVDPP_README.md](TIMESVDPP_README.md)). "Time decay, users refit" (`decay-refit`) is the continuous-decay approach the proposal compares against: the same exact refit as flexrecsys (mf-refit only), but with every rating's weight halving for each 180 days between it and the user's latest rating, so old ratings fade smoothly instead of being cut off at a change point.
 
 ## Usage
 
@@ -112,6 +116,15 @@ Each run writes `results/<tag>.json`, per-user scores, a figure (PNG and PDF) an
 ```bash
 python subgroup.py results/final_test     # hard update vs mf-refit only: flagged, unflagged, by history length
 python plots.py results/final_test.json   # redraw figure and tables
+```
+
+The proposal's remaining comparisons (Surprise SVD, the threshold detector and the drift-signal ablation) run on validation, then once on the fresh users' test split, and on Netflix without the genre models:
+
+```bash
+pip install scikit-surprise      # or: conda install -c conda-forge scikit-surprise
+python compare.py --models surprise-svd mf mf-refit flexrecsys-threshold flexrecsys-v1 flexrecsys-v1-genre flexrecsys-v1-both flexrecsys --tag proposal_val
+python compare.py --fresh-users 2600 --eval test --models surprise-svd mf mf-refit flexrecsys-threshold flexrecsys-v1 flexrecsys-v1-genre flexrecsys-v1-both flexrecsys --tag fresh_proposal
+python compare.py --data netflix_day_dev --eval test --models surprise-svd mf mf-refit flexrecsys-threshold flexrecsys-v1 flexrecsys --tag netflix_proposal
 ```
 
 - `--eval test` scores the same train-only models on test; every choice (early stopping, refit strength, TimeSVD++ epoch count) is still made on validation. The flag checks always use validation.
@@ -150,12 +163,18 @@ Intervals are ±1 standard deviation over seeds, except the bias baseline (deter
 
 | Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
 |:---|---:|---:|---:|---:|---:|
+| Surprise SVD | **0.8252 ± 0.0003** | 0.0338 ± 0.0006 | 0.0361 ± 0.0007 | 0.0366 ± 0.0005 | 0.0360 ± 0.0007 |
 | MF | 0.8463 ± 0.0001 | 0.0630 ± 0.0005 | 0.0703 ± 0.0002 | 0.0660 ± 0.0004 | 0.0666 ± 0.0003 |
-| flexrecsys (mf-refit only) | **0.8323 ± 0.0006** | **0.0771 ± 0.0013** | **0.0851 ± 0.0012** | **0.0822 ± 0.0009** | **0.0820 ± 0.0009** |
+| flexrecsys (mf-refit only) | 0.8323 ± 0.0006 | **0.0771 ± 0.0013** | **0.0851 ± 0.0012** | **0.0822 ± 0.0009** | **0.0820 ± 0.0009** |
 | flexrecsys (hard update) | 0.8538 ± 0.0010 | 0.0746 ± 0.0011 | 0.0831 ± 0.0010 | 0.0793 ± 0.0012 | 0.0794 ± 0.0010 |
 | flexrecsys (soft update) | 0.8384 ± 0.0007 | 0.0766 ± 0.0009 | 0.0844 ± 0.0008 | 0.0818 ± 0.0009 | 0.0816 ± 0.0008 |
+| flexrecsys (threshold detector) | 0.8672 ± 0.0013 | 0.0714 ± 0.0014 | 0.0792 ± 0.0009 | 0.0764 ± 0.0015 | 0.0763 ± 0.0011 |
+| flexrecsys (window BOCPD) | 0.8459 ± 0.0005 | 0.0585 ± 0.0012 | 0.0646 ± 0.0004 | 0.0611 ± 0.0014 | 0.0613 ± 0.0011 |
+| flexrecsys (window BOCPD, genre signal) | 0.8473 ± 0.0001 | 0.0622 ± 0.0005 | 0.0684 ± 0.0007 | 0.0652 ± 0.0002 | 0.0651 ± 0.0002 |
+| flexrecsys (window BOCPD, embedding and genre signals) | 0.8469 ± 0.0002 | 0.0603 ± 0.0006 | 0.0660 ± 0.0009 | 0.0630 ± 0.0001 | 0.0627 ± 0.0006 |
 
 - The dev-sample results hold. flexrecsys (hard update) is below flexrecsys (mf-refit only) on Recall@10 by 0.0025 (95% interval 0.0008 to 0.0041), with the loss again confined to flagged users (0.0073 lower, interval 0.0026 to 0.0117; unflagged users +0.0002, interval −0.0003 to +0.0007).
+- The models added for the proposal (Surprise SVD, the threshold detector and the three window-BOCPD signals) were run on these users once, in a separate run with the same configuration; the rows shared by both runs agree to the last digit.
 - flexrecsys (soft update) chose the strongest pull toward full history (x300) on all three seeds and matches flexrecsys (mf-refit only): Recall@10 −0.0005 (interval −0.0012 to +0.0002).
 - The flag checks replicate: 35.0% of users flagged against 5.2% after shuffling; the post-change profile predicts flagged users better by 0.290 squared error (interval 0.193 to 0.390) against 0.136 (0.088 to 0.186) for unflagged users; the genre mix moves by 0.045 (0.040 to 0.049) against 0.037 (0.034 to 0.040), with 44.8% of flagged and 30.6% of unflagged users beyond chance.
 
@@ -166,6 +185,7 @@ A 1% sample of Netflix Prize users with day-aware splits (`data/netflix_day_dev`
 | Model | RMSE ↓ | Recall@10 ↑ | Recall@20 ↑ | NDCG@10 ↑ | NDCG@20 ↑ |
 |:---|---:|---:|---:|---:|---:|
 | Bias baseline | 0.9225 | 0.0421 ± 0.0044 | 0.0427 ± 0.0040 | 0.0461 ± 0.0049 | 0.0421 ± 0.0039 |
+| Surprise SVD | 0.9032 ± 0.0006 | 0.0321 ± 0.0006 | 0.0360 ± 0.0011 | 0.0316 ± 0.0010 | 0.0320 ± 0.0002 |
 | MF | 0.9079 ± 0.0001 | 0.0550 ± 0.0003 | 0.0554 ± 0.0007 | 0.0591 ± 0.0005 | 0.0549 ± 0.0006 |
 | Time decay, users refit | 0.8989 ± 0.0014 | 0.0622 ± 0.0009 | 0.0671 ± 0.0006 | **0.0648 ± 0.0006** | **0.0631 ± 0.0005** |
 | TimeSVD++ | **0.8857 ± 0.0008** | 0.0495 ± 0.0033 | 0.0574 ± 0.0028 | 0.0493 ± 0.0044 | 0.0507 ± 0.0029 |
@@ -173,8 +193,10 @@ A 1% sample of Netflix Prize users with day-aware splits (`data/netflix_day_dev`
 | flexrecsys (hard update) | 0.9069 ± 0.0017 | 0.0613 ± 0.0015 | 0.0664 ± 0.0002 | 0.0635 ± 0.0005 | 0.0620 ± 0.0004 |
 | flexrecsys (soft update) | 0.9019 ± 0.0017 | 0.0621 ± 0.0013 | **0.0674 ± 0.0002** | 0.0643 ± 0.0006 | 0.0629 ± 0.0001 |
 | flexrecsys (level update) | 0.9051 ± 0.0015 | 0.0622 ± 0.0013 | 0.0672 ± 0.0002 | 0.0644 ± 0.0005 | 0.0628 ± 0.0001 |
+| flexrecsys (threshold detector) | 0.9112 ± 0.0024 | 0.0592 ± 0.0006 | 0.0644 ± 0.0002 | 0.0620 ± 0.0004 | 0.0605 ± 0.0005 |
+| flexrecsys (window BOCPD) | 0.9047 ± 0.0004 | 0.0534 ± 0.0005 | 0.0550 ± 0.0006 | 0.0570 ± 0.0011 | 0.0536 ± 0.0004 |
 
-Ranking metrics cover the 2,310 users with at least one test rating of 4.0 or higher.
+Ranking metrics cover the 2,310 users with at least one test rating of 4.0 or higher. Surprise SVD, the threshold detector and window BOCPD come from a second run with the same configuration; the genre-signal models need MovieLens genres and were not run.
 
 - flexrecsys (mf-refit only) beats TimeSVD++ on Recall@10 by 0.0128 (95% interval 0.0087 to 0.0168), and TimeSVD++ has the best RMSE, as on MovieLens.
 - For the 561 flagged users, against flexrecsys (mf-refit only): the hard update lowers Recall@10 by 0.0058 (interval 0.0013 to 0.0104) and raises squared error by 0.052 (0.021 to 0.087); the soft update has no detectable effect; the level update raises squared error by 0.025 (0.003 to 0.051).
@@ -205,10 +227,14 @@ Validation, three seeds, same base model.
 
 | Model | RMSE | Recall@10 | NDCG@10 |
 |:---|---:|---:|---:|
+| Surprise SVD | 0.7881 | 0.0315 | 0.0324 |
 | MF | 0.8136 | 0.0531 | 0.0547 |
 | Time decay, users refit | 0.7912 | 0.0714 | 0.0735 |
 | flexrecsys (mf-refit only) | 0.7948 | 0.0738 | 0.0760 |
 | flexrecsys (window BOCPD) | 0.8133 | 0.0489 | 0.0511 |
+| flexrecsys (window BOCPD, genre signal) | 0.8135 | 0.0540 | 0.0555 |
+| flexrecsys (window BOCPD, embedding and genre signals) | 0.8132 | 0.0514 | 0.0535 |
+| flexrecsys (threshold detector) | 0.8113 | 0.0695 | 0.0729 |
 | flexrecsys (hard update, fixed prior) | 0.8035 | 0.0733 | 0.0759 |
 | flexrecsys (hard update, fitted prior) | 0.8051 | 0.0726 | 0.0756 |
 | flexrecsys (soft update) | 0.7947 | 0.0741 | 0.0763 |
@@ -223,6 +249,51 @@ The flag checks test whether the rating-space detector's flags are meaningful:
 - **Genre shift.** The genre mix of the ratings just after the change differs from the mix just before it, beyond what random splits of the same ratings give, by 0.050 Jensen-Shannon divergence for flagged users (interval 0.045 to 0.055) and 0.039 for unflagged users (0.036 to 0.043). 44.1% of flagged and 30.9% of unflagged users move beyond chance, where 5% is nominal. The genres that move most are the most common ones (Drama, Comedy, Action, Thriller, Romance).
 
 So the detector finds real changes, partly in what users watch and not only in how they rate. The changes are gradual shifts in the balance of common genres, and they are not durable enough to act on: the full history predicts a user's future better than the post-change history does. Because the comparison point for every user is the detector's best guess at a change, the genre measure is somewhat inflated for both groups; the comparison between them is the informative one.
+
+### The proposal's comparisons
+
+**Drift signals for window BOCPD.** The proposal planned an ablation of the signals that window BOCPD watches. Recall@10, against plain MF, the model window BOCPD retrains:
+
+| Signal | Users flagged | MovieLens validation | Fresh MovieLens users, test |
+|:---|---:|---:|---:|
+| none (plain MF) | | 0.0531 | 0.0630 |
+| embedding (user vector per window) | 85% | 0.0489 | 0.0585 |
+| genre mix per window | 21% | 0.0540 | 0.0622 |
+| embedding and genre | 51% | 0.0514 | 0.0603 |
+
+The genre signal flags far fewer users and is the only one that does not clearly hurt: slightly above plain MF on validation, slightly below it on the fresh users, both within about one seed's spread. The embedding signal, computed from 10 ratings at a time, is too noisy; adding it to the genre signal makes the genre signal worse.
+
+**Window size and hazard rate.** The proposal also planned tuning both for window BOCPD with the embedding signal. MovieLens validation, three seeds:
+
+| Window (ratings) | Users flagged | RMSE | Recall@10 |
+|---:|---:|---:|---:|
+| 5 | 95% | 0.8138 | 0.0465 |
+| 10 (default) | 85% | 0.8133 | 0.0489 |
+| 20 | 70% | 0.8123 | 0.0483 |
+| 40 | 47% | 0.8117 | 0.0503 |
+
+| Expected run length (1 / hazard) | Users flagged | RMSE | Recall@10 |
+|---:|---:|---:|---:|
+| 5 | 94% | 0.8124 | 0.0472 |
+| 20 (default) | 85% | 0.8133 | 0.0489 |
+| 50 | 79% | 0.8136 | 0.0492 |
+| 100 | 75% | 0.8136 | 0.0489 |
+
+Plain MF scores 0.8136 and 0.0531. Larger windows flag fewer users and move window BOCPD toward plain MF, with a small RMSE gain at 40 ratings (0.8117, about 0.2%, consistent across seeds) but still worse ranking. The hazard rate changes the number of flags but barely changes either measure. No setting ranks as well as plain MF.
+
+**Threshold detector against the Bayesian test.** Both are acted on in the same way, so the comparison isolates the detector. The threshold test flags more users (48% of the MovieLens dev users and 31% on Netflix, against 35% and 24%) and is worse on every held-out comparison: Recall@10 0.0714 against 0.0746 on the fresh MovieLens users and 0.0592 against 0.0613 on Netflix, with worse RMSE on both. Its cut-off holds false alarms to 5% on shuffled histories, but on real histories it reacts to small trends that the Bayesian test, with its prior against changes, discounts.
+
+**Surprise SVD.** Surprise's SVD, with its default per-rating penalty, has the best RMSE of any model on the fresh MovieLens users (0.8252) and ranks below the bias baseline on every dataset (Recall@10 0.0338 on the fresh users, against 0.0630 for MF with weight decay). It is the same trade-off as the original MF recipe, from an independent implementation.
+
+**Runtime and scale.** Seconds per model and seed, on CPU:
+
+| Dataset | Train ratings | MF | mf-refit only (refit) | hard update | threshold detector | window BOCPD | Surprise SVD | TimeSVD++ |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Netflix 1% | 641,771 | 4 | 0.2 | 3 | 4 | 13 | 3 | 84 |
+| MovieLens dev | 851,711 | 6 | 0.3 | 4 | 6 | 18 | 4 | 140 |
+| Netflix, 24,582 users | 6,457,703 | 42 | 2.5 | 33 | 43 | | | |
+
+The refit and both detectors scale roughly linearly: ten times the ratings takes about ten times as long. On the large Netflix sample (validation, one seed) the conclusions hold: flexrecsys (hard update) and flexrecsys (mf-refit only) rank the same (Recall@10 0.0602 against 0.0604, paired difference −0.4%, interval −1.0% to +0.3%), the threshold detector is slightly behind (0.0598), and the hard update has slightly better RMSE (0.9072 against 0.9097). The refit and change-point stages add about 1.5 seconds per thousand users on top of MF. A few runs whose timings were inflated by the machine pausing (over 290 seconds for steps that otherwise take 5 to 40) are left out.
 
 ### Residual BOCPD
 
@@ -274,15 +345,16 @@ python compare.py --synthetic --models mf-refit flexrecsys
 - The rating-space detector allows at most one change per user.
 - The flag checks cannot separate a change in rating level from a change in taste; the two are entangled in the user profile. The genre shift covers taste only on MovieLens, since Netflix has no genre data.
 - The residual BOCPD results are single-seed, RMSE-only and use the original MF recipe, so they are not directly comparable with the `compare.py` tables.
-- A Surprise-based MF baseline and a simple threshold detector, both in the proposal, were not implemented.
+- The drift-signal ablation and the window and hazard tuning use window BOCPD only, on MovieLens; the genre signal cannot run on Netflix.
+- The runtime figures come from one machine and the large-sample run from one seed on validation.
 
 ## Project structure
 
 | File | Description |
 |---|---|
 | `data.py` | Dataset download, filtering and chronological splits |
-| `mf.py` | Bias baseline, PyTorch matrix factorization, closed-form user refits |
-| `changepoint.py` | Rating-space detector, fitted prior, time-decay weights, window BOCPD, and the flag checks |
+| `mf.py` | Bias baseline, PyTorch matrix factorization, closed-form user refits, Surprise SVD wrapper |
+| `changepoint.py` | Rating-space detector, threshold detector, fitted prior, time-decay weights, window BOCPD with embedding and genre signals, and the flag checks |
 | `bocpd.py` | Residual BOCPD, binary weights and blending |
 | `train_bocpd_mf.py`, `train_bocpd_blending.py` | flexrecsys (residual BOCPD, binary weights) and (residual BOCPD, blending), with sweeps |
 | `metrics.py` | RMSE, Recall@K, NDCG@K |
